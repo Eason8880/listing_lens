@@ -4,9 +4,18 @@ export const PROMPT_PRESET_IDS = [
   "localized-beauty",
   "sales-booster",
 ] as const;
+export const ASPECT_RATIO_IDS = [
+  "1:1",
+  "4:5",
+  "3:4",
+  "4:3",
+  "3:2",
+  "16:9",
+] as const;
 
 export type ModelOptionId = (typeof MODEL_OPTION_IDS)[number];
 export type PromptPresetId = (typeof PROMPT_PRESET_IDS)[number];
+export type AspectRatioId = (typeof ASPECT_RATIO_IDS)[number];
 
 export interface ModelOption {
   id: ModelOptionId;
@@ -22,6 +31,18 @@ export interface PromptPreset {
   focus: string;
 }
 
+export interface LanguageOption {
+  value: string;
+  label: string;
+}
+
+export interface AspectRatioOption {
+  id: AspectRatioId;
+  label: string;
+  description: string;
+  aspectRatio: string;
+}
+
 export interface ExtractedImageCandidate {
   url: string;
   source: string;
@@ -32,6 +53,7 @@ export interface ExtractedImageCandidate {
 export interface GenerateImageRequest {
   sourceLanguage?: string;
   targetLanguage: string;
+  aspectRatio: AspectRatioId;
   presetId: PromptPresetId;
   customPrompt?: string;
   model: ModelOptionId;

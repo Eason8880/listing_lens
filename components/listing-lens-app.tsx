@@ -1,15 +1,17 @@
 "use client";
 
-import { startTransition, useEffect, useId, useRef, useState } from "react";
+import { startTransition, useEffect, useRef, useState } from "react";
 
 import {
   APP_NAME,
   API_BASE_URL,
   API_KEY_STORAGE_KEY,
   ALLOWED_IMAGE_TYPES,
+  ASPECT_RATIO_OPTIONS,
   DEFAULT_MODEL_ID,
   DEFAULT_PRESET_ID,
-  LANGUAGE_SUGGESTIONS,
+  DEFAULT_ASPECT_RATIO_ID,
+  LANGUAGE_OPTIONS,
   MAX_REMOTE_IMAGE_BYTES,
   MAX_UPLOAD_BYTES,
   MODEL_OPTIONS,
@@ -17,6 +19,7 @@ import {
 } from "@/lib/constants";
 import { buildGenerationPrompt } from "@/lib/prompt";
 import type {
+  AspectRatioId,
   ExtractedImageCandidate,
   GenerateImageResponse,
   ModelOptionId,
@@ -38,9 +41,14 @@ type ImagesEditApiResponse = {
 
 const INPUT_BASE_CLASS =
   "w-full rounded-2xl border border-[rgba(82,55,30,0.12)] bg-white/80 px-4 py-3 text-sm text-stone-900 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)] outline-none transition placeholder:text-stone-400 focus:border-orange-400 focus:bg-white focus:ring-4 focus:ring-orange-200/60";
+const PANEL_HEADER_CLASS =
+  "flex items-center justify-between gap-4 border-b border-[rgba(67,47,28,0.08)] bg-[#fbf5ec] px-4 py-3";
+const PANEL_SCROLL_AREA_CLASS =
+  "scrollbar-soft scrollbar-soft-desktop min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-4 pb-4 sm:px-5 sm:pb-5";
+const STEP_BADGE_CLASS =
+  "shrink-0 whitespace-nowrap rounded-full border border-stone-200 bg-white/80 px-3 py-1 text-xs font-medium text-stone-600";
 
 export function ListingLensApp() {
-  const datalistId = useId();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [uploadMode, setUploadMode] = useState<UploadMode>("file");
@@ -48,6 +56,8 @@ export function ListingLensApp() {
   const [sourceLanguage, setSourceLanguage] = useState("");
   const [targetLanguage, setTargetLanguage] = useState("English");
   const [apiKey, setApiKey] = useState("");
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [aspectRatio, setAspectRatio] = useState<AspectRatioId>(DEFAULT_ASPECT_RATIO_ID);
   const [presetId, setPresetId] = useState<PromptPresetId>(DEFAULT_PRESET_ID);
   const [customPrompt, setCustomPrompt] = useState("");
   const [modelId, setModelId] = useState<ModelOptionId>(DEFAULT_MODEL_ID);
@@ -87,8 +97,28 @@ export function ListingLensApp() {
     window.localStorage.setItem(API_KEY_STORAGE_KEY, apiKey);
   }, [apiKey]);
 
+  useEffect(() => {
+    if (!isSettingsOpen) {
+      return;
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setIsSettingsOpen(false);
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isSettingsOpen]);
+
   const activePreset = PROMPT_PRESETS.find((preset) => preset.id === presetId) ?? PROMPT_PRESETS[1];
   const activeModel = MODEL_OPTIONS.find((item) => item.id === modelId) ?? MODEL_OPTIONS[0];
+  const activeAspectRatio =
+    ASPECT_RATIO_OPTIONS.find((item) => item.id === aspectRatio) ?? ASPECT_RATIO_OPTIONS[0];
   const sourcePreview = uploadMode === "file" ? filePreviewUrl : selectedImageUrl;
   const canGenerate =
     apiKey.trim().length > 0 &&
@@ -195,7 +225,7 @@ export function ListingLensApp() {
 
   async function handleGenerate() {
     if (!apiKey.trim()) {
-      setFormError("请先输入 API Key，密钥只会保存在当前浏览器本地。");
+      setFormError("请先点击右上角齿轮设置 API Key，密钥只会保存在当前浏览器本地。");
       return;
     }
 
@@ -223,6 +253,7 @@ export function ListingLensApp() {
       const prompt = buildGenerationPrompt({
         sourceLanguage: sourceLanguage.trim() || undefined,
         targetLanguage: targetLanguage.trim(),
+        aspectRatio,
         presetId,
         customPrompt: customPrompt.trim() || undefined,
       });
@@ -303,95 +334,109 @@ export function ListingLensApp() {
   }
 
   return (
-    <main className="relative overflow-hidden px-4 py-6 text-stone-900 sm:px-6 lg:px-10">
+    <main className="relative min-h-screen overflow-hidden px-4 py-4 text-stone-900 sm:px-5 lg:px-6">
       <div className="pointer-events-none absolute inset-0">
-        <div className="absolute left-[-8rem] top-10 h-64 w-64 rounded-full bg-orange-300/30 blur-3xl" />
-        <div className="absolute right-[-4rem] top-40 h-72 w-72 rounded-full bg-amber-200/40 blur-3xl" />
-        <div className="absolute bottom-[-8rem] left-1/3 h-72 w-72 rounded-full bg-yellow-200/30 blur-3xl" />
+        <div className="absolute left-[-8rem] top-6 h-56 w-56 rounded-full bg-orange-300/25 blur-3xl" />
+        <div className="absolute right-[-4rem] top-32 h-64 w-64 rounded-full bg-amber-200/35 blur-3xl" />
+        <div className="absolute bottom-[-8rem] left-1/3 h-64 w-64 rounded-full bg-yellow-200/25 blur-3xl" />
       </div>
 
-      <div className="relative mx-auto flex max-w-7xl flex-col gap-6">
-        <section className="glass-panel-strong rounded-[2rem] px-6 py-6 sm:px-8 sm:py-8">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-            <div className="max-w-3xl space-y-3">
-              <span className="inline-flex w-fit items-center rounded-full border border-orange-300/60 bg-orange-100/80 px-3 py-1 text-xs font-semibold tracking-[0.2em] text-orange-700 uppercase">
+      <div className="relative mx-auto flex max-w-[1760px] flex-col gap-4">
+        <section className="glass-panel-strong rounded-[1.75rem] px-5 py-4 sm:px-6">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+            <div className="min-w-0 max-w-4xl space-y-2">
+              <span className="inline-flex w-fit items-center rounded-full border border-orange-300/60 bg-orange-100/80 px-3 py-1 text-[11px] font-semibold tracking-[0.18em] text-orange-700 uppercase">
                 Cross-border Ecommerce Imaging
               </span>
-              <div className="space-y-2">
-                <h1 className="text-4xl font-semibold tracking-tight text-stone-950 sm:text-5xl">
+              <div className="space-y-1.5">
+                <h1 className="text-3xl font-semibold tracking-tight text-stone-950 sm:text-[2rem]">
                   {APP_NAME}
                 </h1>
-                <p className="max-w-2xl text-sm leading-7 text-stone-600 sm:text-base">
+                <p className="max-w-3xl text-sm leading-6 text-stone-600">
                   把商品主图的本地化、翻译替字和电商视觉美化收进一个工作台里。
                   上传图片或粘贴商品页链接，几步就能生成更适合目标市场的主图版本。
                 </p>
               </div>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-3">
-              <StatCard label="主流程" value="上传 / URL 抓图" />
-              <StatCard label="默认模型" value={MODEL_OPTIONS[0].label} />
-              <StatCard label="结果交付" value="URL 可复制" />
+            <div className="flex flex-col gap-3 xl:items-end">
+              <button
+                type="button"
+                onClick={() => setIsSettingsOpen(true)}
+                className="inline-flex min-h-11 items-center gap-2 rounded-full border border-orange-200 bg-orange-50/90 px-4 py-2 text-sm font-semibold text-orange-700 transition hover:border-orange-300 hover:bg-orange-100"
+                aria-label="输入或获取 API Key"
+                title="输入或获取 API Key"
+              >
+                <GearIcon />
+                <span>{apiKey.trim() ? "已保存 API Key" : "输入或获取 API Key"}</span>
+              </button>
+
+              <div className="grid gap-3 sm:grid-cols-3 xl:min-w-[620px]">
+                <StatCard label="主流程" value="上传 / URL 抓图" />
+                <StatCard label="默认比例" value={activeAspectRatio.id} />
+                <StatCard label="结果交付" value="URL 可复制" />
+              </div>
             </div>
           </div>
         </section>
 
-        <section className="grid gap-6 xl:grid-cols-[minmax(0,1.05fr)_minmax(360px,0.95fr)]">
-          <div className="glass-panel rounded-[2rem] p-5 sm:p-6">
-            <div className="mb-5 flex items-center justify-between gap-4">
+        <section className="grid gap-4 xl:h-[calc(100vh-12rem)] xl:grid-cols-[minmax(320px,0.72fr)_minmax(460px,1fr)_minmax(380px,0.82fr)]">
+          <div className="glass-panel flex overflow-hidden rounded-[1.75rem] xl:min-h-0 xl:flex-col">
+            <div className={PANEL_HEADER_CLASS}>
               <div>
                 <p className="text-sm font-semibold text-stone-900">生成配置</p>
-                <p className="text-sm text-stone-500">先选主图来源，再配置语言、提示词和模型。</p>
+                <p className="text-sm text-stone-500">先选主图来源，再准备输入素材。</p>
               </div>
-              <span className="rounded-full border border-stone-200 bg-white/70 px-3 py-1 text-xs font-medium text-stone-600">
-                无登录 MVP
+              <span className={STEP_BADGE_CLASS}>
+                Step 1
               </span>
             </div>
 
-            <div className="space-y-6">
-              <div className="rounded-[1.5rem] border border-stone-200/80 bg-white/70 p-3">
+            <div className={PANEL_SCROLL_AREA_CLASS}>
+              <div className="space-y-4">
+              <div className="rounded-[1.35rem] border border-stone-200/80 bg-white/70 p-3">
                 <div className="grid gap-3 sm:grid-cols-2">
                   <button
                     type="button"
                     onClick={() => setUploadMode("file")}
-                    className={`rounded-[1.25rem] px-4 py-3 text-left transition ${
+                    className={`flex min-h-[10.5rem] flex-col justify-start rounded-[1.25rem] px-4 py-3 text-left transition ${
                       uploadMode === "file"
                         ? "bg-stone-900 text-white shadow-lg shadow-stone-900/20"
                         : "bg-white text-stone-700 hover:bg-orange-50"
                     }`}
                   >
                     <p className="text-sm font-semibold">本地上传主图</p>
-                    <p className="mt-1 text-xs opacity-80">最稳妥，适合你已经拿到原始主图时使用。</p>
+                    <p className="mt-1 text-[12px] leading-6 opacity-80">最稳妥，适合已拿到原图时使用。</p>
                   </button>
 
                   <button
                     type="button"
                     onClick={() => setUploadMode("url")}
-                    className={`rounded-[1.25rem] px-4 py-3 text-left transition ${
+                    className={`flex min-h-[10.5rem] flex-col justify-start rounded-[1.25rem] px-4 py-3 text-left transition ${
                       uploadMode === "url"
                         ? "bg-stone-900 text-white shadow-lg shadow-stone-900/20"
                         : "bg-white text-stone-700 hover:bg-orange-50"
                     }`}
                   >
                     <p className="text-sm font-semibold">商品 URL 抓图</p>
-                    <p className="mt-1 text-xs opacity-80">适合直接从 Amazon、Shopify、AliExpress 等页面找主图。</p>
+                    <p className="mt-1 text-[12px] leading-6 opacity-80">适合直接从电商页面提取主图。</p>
                   </button>
                 </div>
               </div>
 
               {uploadMode === "file" ? (
-                <section className="rounded-[1.5rem] border border-stone-200/80 bg-white/70 p-4">
+                <section className="rounded-[1.35rem] border border-stone-200/80 bg-white/70 p-4">
                   <div className="mb-3 flex items-start justify-between gap-3">
                     <div>
                       <p className="text-sm font-semibold text-stone-900">上传商品主图</p>
-                      <p className="text-xs leading-6 text-stone-500">
-                        支持 JPG、PNG、WEBP、AVIF，建议上传 2000px 以上主图。
+                      <p className="text-[12px] leading-5 text-stone-500">
+                        支持 JPG、PNG、WEBP、AVIF，建议 2000px 以上。
                       </p>
                     </div>
                     <button
                       type="button"
                       onClick={() => fileInputRef.current?.click()}
-                      className="rounded-full bg-orange-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-orange-700"
+                      className="min-w-[7.5rem] whitespace-nowrap rounded-full bg-orange-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-orange-700"
                     >
                       选择文件
                     </button>
@@ -428,7 +473,7 @@ export function ListingLensApp() {
                   </div>
                 </section>
               ) : (
-                <section className="rounded-[1.5rem] border border-stone-200/80 bg-white/70 p-4">
+                <section className="rounded-[1.35rem] border border-stone-200/80 bg-white/70 p-4">
                   <div className="space-y-3">
                     <div>
                       <label className="mb-2 block text-sm font-semibold text-stone-900">商品详情页 URL</label>
@@ -501,65 +546,84 @@ export function ListingLensApp() {
                   </div>
                 </section>
               )}
+              </div>
+            </div>
+          </div>
 
-              <section className="grid gap-4 rounded-[1.5rem] border border-stone-200/80 bg-white/70 p-4 sm:grid-cols-2">
-                <div className="sm:col-span-2">
-                  <div className="mb-2 flex items-center justify-between gap-3">
-                    <label className="block text-sm font-semibold text-stone-900">API Key</label>
-                    <button
-                      type="button"
-                      onClick={() => setApiKey("")}
-                      className="text-xs font-medium text-stone-500 transition hover:text-stone-900"
-                    >
-                      清除本地保存
-                    </button>
-                  </div>
-                  <input
-                    type="password"
-                    value={apiKey}
-                    onChange={(event) => setApiKey(event.target.value)}
-                    placeholder="输入你的 BLTCY API Key，仅保存在当前浏览器本地"
-                    autoComplete="off"
-                    className={INPUT_BASE_CLASS}
-                  />
-                  <p className="mt-2 text-xs leading-6 text-stone-500">
-                    接口地址固定为 <span className="font-medium text-stone-700">{API_BASE_URL}</span>。
-                    API Key 不会写入服务器环境变量，只存浏览器本地，并由前端直接请求图片接口。
-                  </p>
-                </div>
+          <div className="glass-panel flex overflow-hidden rounded-[1.75rem] xl:min-h-0 xl:flex-col">
+            <div className={PANEL_HEADER_CLASS}>
+              <div>
+                <p className="text-sm font-semibold text-stone-900">生成参数</p>
+                <p className="text-sm text-stone-500">配置语言、比例、模型和补充说明。</p>
+              </div>
+              <span className={STEP_BADGE_CLASS}>
+                Step 2
+              </span>
+            </div>
 
+            <div className={PANEL_SCROLL_AREA_CLASS}>
+              <div className="space-y-4">
+              <section className="grid gap-4 rounded-[1.35rem] border border-stone-200/80 bg-white/70 p-4 sm:grid-cols-2">
                 <div>
                   <label className="mb-2 block text-sm font-semibold text-stone-900">源语言（可选）</label>
-                  <input
-                    list={datalistId}
+                  <select
                     value={sourceLanguage}
                     onChange={(event) => setSourceLanguage(event.target.value)}
-                    placeholder="留空则自动识别是否有文字"
                     className={INPUT_BASE_CLASS}
-                  />
+                  >
+                    <option value="">自动识别（未指定）</option>
+                    {LANGUAGE_OPTIONS.map((language) => (
+                      <option key={language.value} value={language.value}>
+                        {language.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <div>
                   <label className="mb-2 block text-sm font-semibold text-stone-900">目标语言</label>
-                  <input
-                    list={datalistId}
+                  <select
                     value={targetLanguage}
                     onChange={(event) => setTargetLanguage(event.target.value)}
-                    placeholder="例如 English / Deutsch / 日本語"
                     className={INPUT_BASE_CLASS}
                     required
-                  />
+                  >
+                    {LANGUAGE_OPTIONS.map((language) => (
+                      <option key={language.value} value={language.value}>
+                        {language.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
-                <datalist id={datalistId}>
-                  {LANGUAGE_SUGGESTIONS.map((language) => (
-                    <option key={language} value={language} />
-                  ))}
-                </datalist>
+                <div className="sm:col-span-2">
+                  <label className="mb-2 block text-sm font-semibold text-stone-900">输出画面比例</label>
+                  <div className="grid gap-2 md:grid-cols-3">
+                    {ASPECT_RATIO_OPTIONS.map((option) => {
+                      const active = option.id === aspectRatio;
+
+                      return (
+                        <button
+                          key={option.id}
+                          type="button"
+                          onClick={() => setAspectRatio(option.id)}
+                          className={`flex min-h-[7.5rem] flex-col justify-start rounded-[1.1rem] border px-3 py-2.5 text-left transition ${
+                            active
+                              ? "border-orange-500 bg-orange-50 shadow-lg shadow-orange-100"
+                              : "border-stone-200 bg-white hover:border-orange-300"
+                          }`}
+                        >
+                          <p className="text-sm font-semibold text-stone-900">{option.label}</p>
+                          <p className="mt-1 text-[12px] leading-5 text-stone-500">{option.description}</p>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
 
                 <div className="sm:col-span-2">
                   <label className="mb-2 block text-sm font-semibold text-stone-900">提示词预设</label>
-                  <div className="grid gap-3 lg:grid-cols-3">
+                  <div className="grid gap-2 lg:grid-cols-3">
                     {PROMPT_PRESETS.map((preset) => {
                       const active = preset.id === presetId;
 
@@ -568,14 +632,14 @@ export function ListingLensApp() {
                           key={preset.id}
                           type="button"
                           onClick={() => setPresetId(preset.id)}
-                          className={`rounded-[1.25rem] border px-4 py-4 text-left transition ${
+                          className={`rounded-[1.1rem] border px-3 py-2.5 text-left transition ${
                             active
                               ? "border-orange-500 bg-orange-50 shadow-lg shadow-orange-100"
                               : "border-stone-200 bg-white hover:border-orange-300"
                           }`}
                         >
                           <p className="text-sm font-semibold text-stone-900">{preset.name}</p>
-                          <p className="mt-2 text-xs leading-6 text-stone-500">{preset.summary}</p>
+                          <p className="mt-1.5 text-[12px] leading-5 text-stone-500">{preset.summary}</p>
                         </button>
                       );
                     })}
@@ -587,15 +651,15 @@ export function ListingLensApp() {
                   <textarea
                     value={customPrompt}
                     onChange={(event) => setCustomPrompt(event.target.value)}
-                    rows={4}
+                    rows={3}
                     placeholder="例如：保留包装盒位置，突出防水卖点，整体风格更偏 Amazon 北美市场。"
-                    className={`${INPUT_BASE_CLASS} min-h-28 resize-y`}
+                    className={`${INPUT_BASE_CLASS} min-h-24 resize-y`}
                   />
                 </div>
 
                 <div className="sm:col-span-2">
                   <label className="mb-2 block text-sm font-semibold text-stone-900">模型选择</label>
-                  <div className="grid gap-3 lg:grid-cols-2">
+                  <div className="grid gap-2 lg:grid-cols-2">
                     {MODEL_OPTIONS.map((model) => {
                       const active = model.id === modelId;
 
@@ -604,7 +668,7 @@ export function ListingLensApp() {
                           key={model.id}
                           type="button"
                           onClick={() => setModelId(model.id)}
-                          className={`rounded-[1.5rem] border px-4 py-4 text-left transition ${
+                          className={`rounded-[1.2rem] border px-4 py-3 text-left transition ${
                             active
                               ? "border-stone-900 bg-stone-900 text-white shadow-xl shadow-stone-900/10"
                               : "border-stone-200 bg-white hover:border-stone-300"
@@ -637,7 +701,7 @@ export function ListingLensApp() {
                   </div>
                 </div>
 
-                <div className="sm:col-span-2 rounded-[1.25rem] border border-amber-200 bg-amber-50/80 px-4 py-4 text-sm leading-7 text-amber-900">
+                <div className="sm:col-span-2 rounded-[1.15rem] border border-amber-200 bg-amber-50/80 px-4 py-3 text-sm leading-6 text-amber-900">
                   <p className="font-semibold">当前生成策略</p>
                   <p className="mt-1">
                     {activePreset.name}。系统会优先保留商品主体、构图和真实信息；
@@ -645,6 +709,7 @@ export function ListingLensApp() {
                       ? `会把图中文字从 ${sourceLanguage.trim()} 转成 ${targetLanguage.trim()}。`
                       : "若检测到图中已有文字，会自动翻译成目标语言；若没有文字，则只做主图美化。"}
                   </p>
+                  <p className="mt-2">输出画面会尽量按 {activeAspectRatio.label} 生成。</p>
                   <p className="mt-2 text-xs leading-6 text-amber-800">
                     如果商品站点禁止浏览器直接读取候选图，URL 抓图后可能无法直接生成，此时请把主图下载后改用本地上传。
                   </p>
@@ -657,7 +722,7 @@ export function ListingLensApp() {
                 </p>
               ) : null}
 
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <button
                   type="button"
                   onClick={handleGenerate}
@@ -672,73 +737,157 @@ export function ListingLensApp() {
                   单次成本 {activeModel.priceLabel}
                 </p>
               </div>
+              </div>
             </div>
           </div>
 
-          <div className="glass-panel rounded-[2rem] p-5 sm:p-6">
-            <div className="mb-5 flex items-center justify-between gap-4">
-              <div>
+          <div className="glass-panel flex overflow-hidden rounded-[1.75rem] xl:min-h-0 xl:flex-col">
+            <div className={PANEL_HEADER_CLASS}>
+              <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold text-stone-900">预览与结果</p>
-                <p className="text-sm text-stone-500">左看输入图，右看生成图，结果 URL 支持一键复制。</p>
+                <p className="truncate text-sm text-stone-500">左看输入图，右看生成图，结果 URL 支持一键复制。</p>
               </div>
+              <span className={STEP_BADGE_CLASS}>
+                Step 3
+              </span>
+            </div>
+
+            <div className={PANEL_SCROLL_AREA_CLASS}>
               {result?.model ? (
-                <span className="rounded-full border border-stone-200 bg-white/80 px-3 py-1 text-xs font-medium text-stone-600">
+                <div className="mb-4 inline-flex rounded-full border border-stone-200 bg-white/80 px-3 py-1 text-xs font-medium text-stone-600">
                   {result.model}
-                </span>
-              ) : null}
-            </div>
-
-            <div className="grid gap-4 lg:grid-cols-2">
-              <PreviewCard
-                title="原始主图"
-                subtitle={uploadMode === "file" ? "本地上传" : "URL 候选图"}
-                imageUrl={sourcePreview}
-                emptyState="上传主图，或先从商品 URL 中抓取并选择候选图。"
-              />
-
-              <PreviewCard
-                title="生成结果"
-                subtitle={result ? "AI 输出" : "等待生成"}
-                imageUrl={result?.imageUrl ?? ""}
-                emptyState="完成配置后点击“生成优化图片”，这里会展示最终结果。"
-              />
-            </div>
-
-            <div className="mt-5 rounded-[1.5rem] border border-stone-200/80 bg-white/70 p-4">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="text-sm font-semibold text-stone-900">生成图 URL</p>
-                  <p className="text-xs leading-6 text-stone-500">
-                    支持直接复制，可用于回填到运营流程或人工复核。
-                  </p>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={handleCopyResultUrl}
-                  disabled={!result?.imageUrl}
-                  className="rounded-full border border-stone-300 bg-white px-4 py-2 text-sm font-medium text-stone-800 transition hover:border-stone-400 hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {copied ? "已复制" : "复制 URL"}
-                </button>
-              </div>
-
-              <div className="mt-3 rounded-[1.25rem] bg-stone-950 px-4 py-3 text-xs leading-6 text-stone-200">
-                {result?.imageUrl || "生成完成后，这里会展示服务商返回的图片 URL。"}
-              </div>
-
-              {result?.revisedPrompt ? (
-                <div className="mt-4 rounded-[1.25rem] border border-stone-200 bg-stone-50 px-4 py-4">
-                  <p className="text-sm font-semibold text-stone-900">服务端返回的修订提示词</p>
-                  <p className="mt-2 whitespace-pre-wrap text-xs leading-6 text-stone-600">
-                    {result.revisedPrompt}
-                  </p>
                 </div>
               ) : null}
+
+              <div className="space-y-4">
+                <div className="grid gap-4 2xl:grid-cols-2">
+                <PreviewCard
+                  title="原始主图"
+                  subtitle={uploadMode === "file" ? "本地上传" : "URL 候选图"}
+                  imageUrl={sourcePreview}
+                  aspectRatio={activeAspectRatio.aspectRatio}
+                  emptyState="上传主图，或先从商品 URL 中抓取并选择候选图。"
+                />
+
+                <PreviewCard
+                  title="生成结果"
+                  subtitle={result ? "AI 输出" : "等待生成"}
+                  imageUrl={result?.imageUrl ?? ""}
+                  aspectRatio={activeAspectRatio.aspectRatio}
+                  emptyState="完成配置后点击“生成优化图片”，这里会展示最终结果。"
+                />
+                </div>
+
+                <div className="rounded-[1.35rem] border border-stone-200/80 bg-white/70 p-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-stone-900">生成图 URL</p>
+                      <p className="text-xs leading-6 text-stone-500">
+                        支持直接复制，可用于回填到运营流程或人工复核。
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleCopyResultUrl}
+                      disabled={!result?.imageUrl}
+                      className="rounded-full border border-stone-300 bg-white px-4 py-2 text-sm font-medium text-stone-800 transition hover:border-stone-400 hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {copied ? "已复制" : "复制 URL"}
+                    </button>
+                  </div>
+
+                  <div className="mt-3 rounded-[1.1rem] bg-stone-950 px-4 py-3 text-xs leading-6 text-stone-200">
+                    {result?.imageUrl || "生成完成后，这里会展示服务商返回的图片 URL。"}
+                  </div>
+
+                  {result?.revisedPrompt ? (
+                    <div className="mt-4 rounded-[1.1rem] border border-stone-200 bg-stone-50 px-4 py-4">
+                      <p className="text-sm font-semibold text-stone-900">服务端返回的修订提示词</p>
+                      <p className="mt-2 whitespace-pre-wrap text-xs leading-6 text-stone-600">
+                        {result.revisedPrompt}
+                      </p>
+                    </div>
+                  ) : null}
+                </div>
+              </div>
             </div>
           </div>
         </section>
       </div>
+
+      {isSettingsOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/45 px-4 py-6">
+          <button
+            type="button"
+            className="absolute inset-0 cursor-default"
+            aria-label="关闭 API Key 设置"
+            onClick={() => setIsSettingsOpen(false)}
+          />
+          <section className="relative z-10 w-full max-w-lg rounded-[2rem] border border-stone-200 bg-[linear-gradient(180deg,rgba(255,252,248,0.98),rgba(249,244,236,0.98))] p-6 shadow-[0_32px_100px_rgba(32,18,5,0.28)] sm:p-7">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-sm font-semibold text-orange-700">API Key 设置</p>
+                <h2 className="mt-2 text-2xl font-semibold tracking-tight text-stone-950">
+                  管理本地预览所用的 BLTCY Key
+                </h2>
+                <p className="mt-2 text-sm leading-7 text-stone-600">
+                  密钥只保存在当前浏览器本地，不写入服务器环境变量。
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsSettingsOpen(false)}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-stone-200 bg-white/85 text-stone-500 transition hover:text-stone-900"
+                aria-label="关闭设置"
+              >
+                <CloseIcon />
+              </button>
+            </div>
+
+            <div className="mt-6 space-y-4">
+              <div>
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <label className="block text-sm font-semibold text-stone-900">API Key</label>
+                  <button
+                    type="button"
+                    onClick={() => setApiKey("")}
+                    className="text-xs font-medium text-stone-500 transition hover:text-stone-900"
+                  >
+                    清除本地保存
+                  </button>
+                </div>
+                <input
+                  type="password"
+                  value={apiKey}
+                  onChange={(event) => setApiKey(event.target.value)}
+                  placeholder="输入你的 BLTCY API Key，仅保存在当前浏览器本地"
+                  autoComplete="off"
+                  className={INPUT_BASE_CLASS}
+                />
+              </div>
+
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <a
+                  href="https://api.bltcy.ai/register?aff=kGaB90952"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex min-h-11 flex-1 items-center justify-center rounded-full bg-orange-600 px-5 text-sm font-semibold text-white no-underline shadow-lg shadow-orange-600/25 transition hover:bg-orange-700"
+                >
+                  获取 API Key
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setIsSettingsOpen(false)}
+                  className="inline-flex min-h-11 flex-1 items-center justify-center rounded-full border border-stone-300 bg-white px-5 text-sm font-semibold text-stone-800 transition hover:border-stone-400 hover:bg-stone-50"
+                >
+                  完成
+                </button>
+              </div>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </main>
   );
 }
@@ -756,11 +905,13 @@ function PreviewCard({
   title,
   subtitle,
   imageUrl,
+  aspectRatio,
   emptyState,
 }: {
   title: string;
   subtitle: string;
   imageUrl: string;
+  aspectRatio: string;
   emptyState: string;
 }) {
   return (
@@ -772,7 +923,10 @@ function PreviewCard({
         </div>
       </div>
 
-      <div className="aspect-[4/3] bg-[linear-gradient(135deg,rgba(246,240,232,0.95),rgba(238,226,211,0.9))]">
+      <div
+        className="bg-[linear-gradient(135deg,rgba(246,240,232,0.95),rgba(238,226,211,0.9))]"
+        style={{ aspectRatio }}
+      >
         {imageUrl ? (
           <img src={imageUrl} alt={title} className="h-full w-full object-contain" />
         ) : (
@@ -782,5 +936,26 @@ function PreviewCard({
         )}
       </div>
     </article>
+  );
+}
+
+function GearIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-5 w-5">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M10.325 4.317a1.724 1.724 0 0 1 3.35 0l.19.76a1.724 1.724 0 0 0 2.573 1.066l.68-.399a1.724 1.724 0 0 1 2.37.63l.548.95a1.724 1.724 0 0 1-.63 2.37l-.68.399a1.724 1.724 0 0 0-.842 1.49c0 .533.208 1.044.58 1.427l.544.56a1.724 1.724 0 0 1 0 2.396l-.77.793a1.724 1.724 0 0 1-2.396 0l-.544-.56a1.724 1.724 0 0 0-1.427-.58 1.724 1.724 0 0 0-1.49.842l-.399.68a1.724 1.724 0 0 1-2.37.63l-.95-.548a1.724 1.724 0 0 1-.63-2.37l.399-.68a1.724 1.724 0 0 0-1.066-2.573l-.76-.19a1.724 1.724 0 0 1 0-3.35l.76-.19a1.724 1.724 0 0 0 1.066-2.573l-.399-.68a1.724 1.724 0 0 1 .63-2.37l.95-.548a1.724 1.724 0 0 1 2.37.63l.399.68a1.724 1.724 0 0 0 2.573 1.066l.76-.19Z"
+      />
+      <circle cx="12" cy="12" r="3.2" />
+    </svg>
+  );
+}
+
+function CloseIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-5 w-5">
+      <path strokeLinecap="round" strokeLinejoin="round" d="m6 6 12 12M18 6 6 18" />
+    </svg>
   );
 }

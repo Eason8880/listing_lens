@@ -1,4 +1,9 @@
-import type { ModelOption, PromptPreset } from "@/lib/types";
+import type {
+  AspectRatioOption,
+  LanguageOption,
+  ModelOption,
+  PromptPreset,
+} from "@/lib/types";
 
 export const APP_NAME = "ListingLens";
 export const API_BASE_URL = "https://api.bltcy.ai";
@@ -25,42 +30,87 @@ export const PROMPT_PRESETS: PromptPreset[] = [
   {
     id: "layout-preserve",
     name: "文字本地化并保留版式",
-    summary: "优先翻译替字，尽量保持原图构图、字位与视觉节奏。",
+    summary: "优先翻译替字，尽量保留原图构图与字位。",
     focus: "text-localization",
   },
   {
     id: "localized-beauty",
     name: "本地化 + 主图美化",
-    summary: "在翻译基础上提升质感、对比度与电商吸引力。",
+    summary: "在翻译基础上提升质感与电商吸引力。",
     focus: "localized-beauty",
   },
   {
     id: "sales-booster",
     name: "本地化 + 卖点强化",
-    summary: "增强卖点层级与信息可读性，但不虚构功能或参数。",
+    summary: "增强卖点层级与可读性，不虚构功能参数。",
     focus: "sales-booster",
   },
 ];
 
 export const DEFAULT_PRESET_ID = "localized-beauty";
 
-export const LANGUAGE_SUGGESTIONS = [
-  "English",
-  "Deutsch",
-  "Français",
-  "Español",
-  "Italiano",
-  "Português",
-  "Polski",
-  "Nederlands",
-  "日本語",
-  "한국어",
-  "简体中文",
-  "繁體中文",
-  "Türkçe",
-  "Русский",
-  "العربية",
+export const LANGUAGE_OPTIONS: LanguageOption[] = [
+  { value: "English", label: "English（英语）" },
+  { value: "Deutsch", label: "Deutsch（德语）" },
+  { value: "Français", label: "Français（法语）" },
+  { value: "Español", label: "Español（西班牙语）" },
+  { value: "Italiano", label: "Italiano（意大利语）" },
+  { value: "Português", label: "Português（葡萄牙语）" },
+  { value: "Polski", label: "Polski（波兰语）" },
+  { value: "Nederlands", label: "Nederlands（荷兰语）" },
+  { value: "日本語", label: "日本語（日语）" },
+  { value: "한국어", label: "한국어（韩语）" },
+  { value: "简体中文", label: "简体中文（简体中文）" },
+  { value: "繁體中文", label: "繁體中文（繁体中文）" },
+  { value: "Türkçe", label: "Türkçe（土耳其语）" },
+  { value: "Русский", label: "Русский（俄语）" },
+  { value: "ไทย", label: "ไทย（泰语）" },
+  { value: "Tiếng Việt", label: "Tiếng Việt（越南语）" },
+  { value: "Filipino", label: "Filipino（菲律宾语）" },
+  { value: "Bahasa Malaysia", label: "Bahasa Malaysia（马来西亚语）" },
+  { value: "العربية", label: "العربية（阿拉伯语）" },
 ];
+
+export const ASPECT_RATIO_OPTIONS: AspectRatioOption[] = [
+  {
+    id: "1:1",
+    label: "1:1（方图）",
+    description: "适合通用主图与宫格展示。",
+    aspectRatio: "1 / 1",
+  },
+  {
+    id: "4:5",
+    label: "4:5（竖版）",
+    description: "适合信息流和移动端卡片。",
+    aspectRatio: "4 / 5",
+  },
+  {
+    id: "3:4",
+    label: "3:4（竖版）",
+    description: "适合人物感更强的海报展示。",
+    aspectRatio: "3 / 4",
+  },
+  {
+    id: "4:3",
+    label: "4:3（标准横版）",
+    description: "适合常规主图场景，默认更稳妥。",
+    aspectRatio: "4 / 3",
+  },
+  {
+    id: "3:2",
+    label: "3:2（横版）",
+    description: "适合强调场景感和环境信息。",
+    aspectRatio: "3 / 2",
+  },
+  {
+    id: "16:9",
+    label: "16:9（宽横版）",
+    description: "适合横幅、首屏和广告素材。",
+    aspectRatio: "16 / 9",
+  },
+];
+
+export const DEFAULT_ASPECT_RATIO_ID = "1:1";
 
 export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 export const MAX_REMOTE_IMAGE_BYTES = 10 * 1024 * 1024;

@@ -65,4 +65,53 @@ select {
     border: 1px solid rgba(67, 47, 28, 0.14);
     box-shadow: var(--shadow);
   }
+
+  .scrollbar-soft {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(162, 138, 114, 0.38) transparent;
+  }
+
+  .scrollbar-soft::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  .scrollbar-soft::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scrollbar-soft::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: linear-gradient(180deg, rgba(193, 166, 138, 0.75), rgba(160, 131, 103, 0.58));
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+
+  .scrollbar-soft::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, rgba(184, 148, 112, 0.82), rgba(145, 113, 84, 0.7));
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+
+  .scrollbar-soft-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-soft-hide::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .scrollbar-soft-desktop {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+
+    .scrollbar-soft-desktop::-webkit-scrollbar {
+      width: 0;
+      height: 0;
+    }
+  }
 }

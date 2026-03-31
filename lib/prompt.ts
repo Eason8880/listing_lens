@@ -5,6 +5,7 @@ import type { PromptPresetId } from "@/lib/types";
 interface BuildGenerationPromptInput {
   sourceLanguage?: string;
   targetLanguage: string;
+  aspectRatio?: string;
   presetId: PromptPresetId;
   customPrompt?: string;
 }
@@ -21,6 +22,7 @@ const PRESET_INSTRUCTIONS: Record<PromptPresetId, string> = {
 export function buildGenerationPrompt({
   sourceLanguage,
   targetLanguage,
+  aspectRatio,
   presetId,
   customPrompt,
 }: BuildGenerationPromptInput) {
@@ -37,6 +39,9 @@ export function buildGenerationPrompt({
   const customInstruction = customPrompt?.trim()
     ? `Additional request from the merchant: ${customPrompt.trim()}`
     : "No extra merchant instructions were provided.";
+  const aspectRatioInstruction = aspectRatio?.trim()
+    ? `Compose the final hero image in a ${aspectRatio.trim()} aspect ratio unless the original layout makes a tiny adjustment necessary.`
+    : "Keep an ecommerce-friendly output framing that stays faithful to the original composition.";
 
   return [
     "You are editing a cross-border ecommerce product hero image.",
@@ -45,6 +50,7 @@ export function buildGenerationPrompt({
     "Keep the product as the clear focal point and maintain a clean marketplace-ready composition.",
     languageInstruction,
     PRESET_INSTRUCTIONS[presetId],
+    aspectRatioInstruction,
     "When text exists, replace the original wording with natural, market-appropriate copy in the target language while preserving the original visual hierarchy as much as possible.",
     "When the image has no text, focus on tasteful hero-image enhancement only and avoid forcing labels or extra wording.",
     "Improve overall readability and commercial appeal, but avoid excessive hallucinated redesign.",

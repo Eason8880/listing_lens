@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { MODEL_OPTION_IDS, PROMPT_PRESET_IDS } from "@/lib/types";
+import { ASPECT_RATIO_IDS, MODEL_OPTION_IDS, PROMPT_PRESET_IDS } from "@/lib/types";
 
 export const extractImagesSchema = z.object({
   productUrl: z.url("请输入有效的商品链接。"),
@@ -9,6 +9,7 @@ export const extractImagesSchema = z.object({
 export const generateImageSchema = z.object({
   sourceLanguage: z.string().trim().max(40).optional().or(z.literal("")),
   targetLanguage: z.string().trim().min(1, "目标语言不能为空。").max(40),
+  aspectRatio: z.enum(ASPECT_RATIO_IDS),
   presetId: z.enum(PROMPT_PRESET_IDS),
   customPrompt: z.string().trim().max(500).optional().or(z.literal("")),
   model: z.enum(MODEL_OPTION_IDS),
