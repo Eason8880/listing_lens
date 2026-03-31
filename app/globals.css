@@ -1,0 +1,68 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f6efe5;
+  --foreground: #1d1a17;
+  --card: rgba(255, 248, 240, 0.78);
+  --card-strong: rgba(255, 251, 246, 0.92);
+  --border: rgba(67, 47, 28, 0.12);
+  --accent: #d66b2d;
+  --accent-strong: #b24c16;
+  --muted: #6f6257;
+  --shadow: 0 24px 80px rgba(72, 39, 14, 0.12);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  min-height: 100vh;
+  margin: 0;
+  color: var(--foreground);
+  font-family:
+    "Avenir Next",
+    "PingFang SC",
+    "Hiragino Sans GB",
+    "Microsoft YaHei",
+    sans-serif;
+  background:
+    radial-gradient(circle at top left, rgba(214, 107, 45, 0.18), transparent 28%),
+    radial-gradient(circle at top right, rgba(229, 196, 110, 0.24), transparent 32%),
+    linear-gradient(180deg, #fbf6ef 0%, #f3e7d8 100%);
+}
+
+::selection {
+  background: rgba(214, 107, 45, 0.25);
+}
+
+a {
+  color: inherit;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+@layer components {
+  .glass-panel {
+    background: var(--card);
+    backdrop-filter: blur(18px);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow);
+  }
+
+  .glass-panel-strong {
+    background: var(--card-strong);
+    backdrop-filter: blur(18px);
+    border: 1px solid rgba(67, 47, 28, 0.14);
+    box-shadow: var(--shadow);
+  }
+}
