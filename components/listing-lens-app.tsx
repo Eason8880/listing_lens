@@ -4,15 +4,37 @@ import { startTransition, useEffect, useId, useRef, useState } from "react";
 
 import {
   APP_NAME,
+  API_BASE_URL,
+  API_KEY_STORAGE_KEY,
+  ALLOWED_IMAGE_TYPES,
   DEFAULT_MODEL_ID,
   DEFAULT_PRESET_ID,
   LANGUAGE_SUGGESTIONS,
+  MAX_REMOTE_IMAGE_BYTES,
+  MAX_UPLOAD_BYTES,
   MODEL_OPTIONS,
   PROMPT_PRESETS,
 } from "@/lib/constants";
-import type { ExtractedImageCandidate, GenerateImageResponse } from "@/lib/types";
+import { buildGenerationPrompt } from "@/lib/prompt";
+import type {
+  ExtractedImageCandidate,
+  GenerateImageResponse,
+  ModelOptionId,
+  PromptPresetId,
+} from "@/lib/types";
 
 type UploadMode = "file" | "url";
+type ImagesEditApiResponse = {
+  data?: Array<{
+    url?: string;
+    revised_prompt?: string;
+  }>;
+  revised_prompt?: string;
+  message?: string;
+  error?: {
+    message?: string;
+  };
+};
 
 const INPUT_BASE_CLASS =
   "w-full rounded-2xl border border-[rgba(82,55,30,0.12)] bg-white/80 px-4 py-3 text-sm text-stone-900 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)] outline-none transition placeholder:text-stone-400 focus:border-orange-400 focus:bg-white focus:ring-4 focus:ring-orange-200/60";
@@ -25,9 +47,10 @@ export function ListingLensApp() {
   const [productUrl, setProductUrl] = useState("");
   const [sourceLanguage, setSourceLanguage] = useState("");
   const [targetLanguage, setTargetLanguage] = useState("English");
-  const [presetId, setPresetId] = useState(DEFAULT_PRESET_ID);
+  const [apiKey, setApiKey] = useState("");
+  const [presetId, setPresetId] = useState<PromptPresetId>(DEFAULT_PRESET_ID);
   const [customPrompt, setCustomPrompt] = useState("");
-  const [modelId, setModelId] = useState(DEFAULT_MODEL_ID);
+  const [modelId, setModelId] = useState<ModelOptionId>(DEFAULT_MODEL_ID);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [filePreviewUrl, setFilePreviewUrl] = useState("");
   const [extractedImages, setExtractedImages] = useState<ExtractedImageCandidate[]>([]);
@@ -40,6 +63,14 @@ export function ListingLensApp() {
   const [isGenerating, setIsGenerating] = useState(false);
 
   useEffect(() => {
+    const storedApiKey = window.localStorage.getItem(API_KEY_STORAGE_KEY);
+
+    if (storedApiKey) {
+      setApiKey(storedApiKey);
+    }
+  }, []);
+
+  useEffect(() => {
     return () => {
       if (filePreviewUrl) {
         URL.revokeObjectURL(filePreviewUrl);
@@ -47,13 +78,73 @@ export function ListingLensApp() {
     };
   }, [filePreviewUrl]);
 
+  useEffect(() => {
+    if (!apiKey) {
+      window.localStorage.removeItem(API_KEY_STORAGE_KEY);
+      return;
+    }
+
+    window.localStorage.setItem(API_KEY_STORAGE_KEY, apiKey);
+  }, [apiKey]);
+
   const activePreset = PROMPT_PRESETS.find((preset) => preset.id === presetId) ?? PROMPT_PRESETS[1];
   const activeModel = MODEL_OPTIONS.find((item) => item.id === modelId) ?? MODEL_OPTIONS[0];
   const sourcePreview = uploadMode === "file" ? filePreviewUrl : selectedImageUrl;
   const canGenerate =
+    apiKey.trim().length > 0 &&
     targetLanguage.trim().length > 0 &&
     ((uploadMode === "file" && Boolean(selectedFile)) ||
       (uploadMode === "url" && Boolean(selectedImageUrl)));
+
+  async function resolveSourceFile() {
+    if (uploadMode === "file" && selectedFile) {
+      if (!ALLOWED_IMAGE_TYPES.has(selectedFile.type)) {
+        throw new Error("图片格式不受支持，仅支持 JPG、PNG、WEBP、AVIF。");
+      }
+
+      if (selectedFile.size > MAX_UPLOAD_BYTES) {
+        throw new Error("上传图片体积过大，请控制在 10MB 以内。");
+      }
+
+      return selectedFile;
+    }
+
+    if (!selectedImageUrl) {
+      throw new Error("请先从候选图里选择一张主图。");
+    }
+
+    let response: Response;
+
+    try {
+      response = await fetch(selectedImageUrl, {
+        headers: {
+          accept: "image/avif,image/webp,image/png,image/jpeg,*/*;q=0.8",
+        },
+      });
+    } catch {
+      throw new Error("候选图所在站点阻止了浏览器直接读取图片，请先下载后再手动上传。");
+    }
+
+    if (!response.ok) {
+      throw new Error(`候选图下载失败，目标站点返回 ${response.status}。`);
+    }
+
+    const imageBlob = await response.blob();
+
+    if (!ALLOWED_IMAGE_TYPES.has(imageBlob.type)) {
+      throw new Error("候选图格式不受支持，请下载后转成 JPG、PNG、WEBP 或 AVIF 再上传。");
+    }
+
+    if (imageBlob.size > MAX_REMOTE_IMAGE_BYTES) {
+      throw new Error("候选图体积过大，请压缩后上传，或换一张分辨率更合适的主图。");
+    }
+
+    const pathname = new URL(selectedImageUrl).pathname.split("/").pop() || "remote-image";
+    const extension = imageBlob.type.split("/")[1] ?? "png";
+    const filename = pathname.includes(".") ? pathname : `${pathname}.${extension}`;
+
+    return new File([imageBlob], filename, { type: imageBlob.type });
+  }
 
   async function handleExtractImages() {
     if (!productUrl.trim()) {
@@ -103,6 +194,11 @@ export function ListingLensApp() {
   }
 
   async function handleGenerate() {
+    if (!apiKey.trim()) {
+      setFormError("请先输入 API Key，密钥只会保存在当前浏览器本地。");
+      return;
+    }
+
     if (!targetLanguage.trim()) {
       setFormError("目标语言不能为空。");
       return;
@@ -123,39 +219,51 @@ export function ListingLensApp() {
     setCopied(false);
 
     try {
+      const sourceFile = await resolveSourceFile();
+      const prompt = buildGenerationPrompt({
+        sourceLanguage: sourceLanguage.trim() || undefined,
+        targetLanguage: targetLanguage.trim(),
+        presetId,
+        customPrompt: customPrompt.trim() || undefined,
+      });
+
       const body = new FormData();
+      body.append("model", activeModel.label);
+      body.append("prompt", prompt);
+      body.append("n", "1");
+      body.append("response_format", "url");
+      body.append("image", sourceFile, sourceFile.name);
 
-      if (uploadMode === "file" && selectedFile) {
-        body.append("image", selectedFile, selectedFile.name);
-      }
-
-      if (uploadMode === "url" && selectedImageUrl) {
-        body.append("remoteImageUrl", selectedImageUrl);
-      }
-
-      body.append("sourceLanguage", sourceLanguage.trim());
-      body.append("targetLanguage", targetLanguage.trim());
-      body.append("presetId", presetId);
-      body.append("customPrompt", customPrompt.trim());
-      body.append("model", modelId);
-
-      const response = await fetch("/api/generate-image", {
+      const response = await fetch(`${API_BASE_URL}/v1/images/edits`, {
         method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey.trim()}`,
+          Accept: "application/json",
+        },
         body,
       });
 
-      const payload = (await response.json()) as
-        | GenerateImageResponse
-        | { error?: string; imageUrl?: string; revisedPrompt?: string; model?: string };
+      const payload = (await response.json()) as ImagesEditApiResponse;
 
-      if (!response.ok || typeof payload.imageUrl !== "string") {
-        throw new Error(("error" in payload && payload.error) || "图片生成失败，请稍后重试。");
+      const resultPayload = Array.isArray(payload.data) ? payload.data[0] : undefined;
+
+      if (!response.ok || typeof resultPayload?.url !== "string") {
+        const errorMessage =
+          (typeof payload.error?.message === "string" && payload.error.message) ||
+          (typeof payload.message === "string" && payload.message) ||
+          "图片生成失败，请稍后重试。";
+
+        throw new Error(errorMessage);
       }
 
       setResult({
-        imageUrl: payload.imageUrl,
-        revisedPrompt: payload.revisedPrompt,
-        model: payload.model ?? activeModel.label,
+        imageUrl: resultPayload.url,
+        revisedPrompt:
+          (typeof resultPayload.revised_prompt === "string" && resultPayload.revised_prompt) ||
+          ("revised_prompt" in payload && typeof payload.revised_prompt === "string"
+            ? payload.revised_prompt
+            : undefined),
+        model: activeModel.label,
       });
     } catch (error) {
       setFormError(error instanceof Error ? error.message : "图片生成失败，请稍后重试。");
@@ -395,6 +503,31 @@ export function ListingLensApp() {
               )}
 
               <section className="grid gap-4 rounded-[1.5rem] border border-stone-200/80 bg-white/70 p-4 sm:grid-cols-2">
+                <div className="sm:col-span-2">
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <label className="block text-sm font-semibold text-stone-900">API Key</label>
+                    <button
+                      type="button"
+                      onClick={() => setApiKey("")}
+                      className="text-xs font-medium text-stone-500 transition hover:text-stone-900"
+                    >
+                      清除本地保存
+                    </button>
+                  </div>
+                  <input
+                    type="password"
+                    value={apiKey}
+                    onChange={(event) => setApiKey(event.target.value)}
+                    placeholder="输入你的 BLTCY API Key，仅保存在当前浏览器本地"
+                    autoComplete="off"
+                    className={INPUT_BASE_CLASS}
+                  />
+                  <p className="mt-2 text-xs leading-6 text-stone-500">
+                    接口地址固定为 <span className="font-medium text-stone-700">{API_BASE_URL}</span>。
+                    API Key 不会写入服务器环境变量，只存浏览器本地，并由前端直接请求图片接口。
+                  </p>
+                </div>
+
                 <div>
                   <label className="mb-2 block text-sm font-semibold text-stone-900">源语言（可选）</label>
                   <input
@@ -511,6 +644,9 @@ export function ListingLensApp() {
                     {sourceLanguage.trim()
                       ? `会把图中文字从 ${sourceLanguage.trim()} 转成 ${targetLanguage.trim()}。`
                       : "若检测到图中已有文字，会自动翻译成目标语言；若没有文字，则只做主图美化。"}
+                  </p>
+                  <p className="mt-2 text-xs leading-6 text-amber-800">
+                    如果商品站点禁止浏览器直接读取候选图，URL 抓图后可能无法直接生成，此时请把主图下载后改用本地上传。
                   </p>
                 </div>
               </section>

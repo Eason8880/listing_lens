@@ -1,6 +1,8 @@
 import type { ModelOption, PromptPreset } from "@/lib/types";
 
 export const APP_NAME = "ListingLens";
+export const API_BASE_URL = "https://api.bltcy.ai";
+export const API_KEY_STORAGE_KEY = "listinglens.apiKey";
 
 export const MODEL_OPTIONS: ModelOption[] = [
   {
