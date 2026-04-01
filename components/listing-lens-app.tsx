@@ -48,6 +48,10 @@ const PANEL_SCROLL_AREA_CLASS =
 const STEP_BADGE_CLASS =
   "shrink-0 whitespace-nowrap rounded-full border border-stone-200 bg-white/80 px-3 py-1 text-xs font-medium text-stone-600";
 
+function buildProxyImageUrl(imageUrl: string) {
+  return imageUrl ? `/api/image-proxy?url=${encodeURIComponent(imageUrl)}` : "";
+}
+
 export function ListingLensApp() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -121,7 +125,8 @@ export function ListingLensApp() {
   const activeModel = MODEL_OPTIONS.find((item) => item.id === modelId) ?? MODEL_OPTIONS[0];
   const activeAspectRatio =
     ASPECT_RATIO_OPTIONS.find((item) => item.id === aspectRatio) ?? ASPECT_RATIO_OPTIONS[0];
-  const sourcePreview = uploadMode === "file" ? filePreviewUrl : selectedImageUrl;
+  const sourcePreview =
+    uploadMode === "file" ? filePreviewUrl : buildProxyImageUrl(selectedImageUrl);
   const canGenerate =
     apiKey.trim().length > 0 &&
     targetLanguage.trim().length > 0 &&
@@ -148,13 +153,13 @@ export function ListingLensApp() {
     let response: Response;
 
     try {
-      response = await fetch(selectedImageUrl, {
+      response = await fetch(buildProxyImageUrl(selectedImageUrl), {
         headers: {
           accept: "image/avif,image/webp,image/png,image/jpeg,*/*;q=0.8",
         },
       });
     } catch {
-      throw new Error("候选图所在站点阻止了浏览器直接读取图片，请先下载后再手动上传。");
+      throw new Error("候选图代理下载失败，请稍后重试，或先下载后改用本地上传。");
     }
 
     if (!response.ok) {
@@ -561,7 +566,7 @@ export function ListingLensApp() {
                               >
                                 <div className="aspect-[4/3] overflow-hidden bg-stone-100">
                                   <img
-                                    src={image.url}
+                                    src={buildProxyImageUrl(image.url)}
                                     alt="候选商品图"
                                     className="h-full w-full object-cover"
                                   />

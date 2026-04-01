@@ -9,6 +9,10 @@ import { AppError } from "@/lib/app-error";
 import { ensureSafeHttpUrl } from "@/lib/ssrf";
 import type { ExtractedImageCandidate } from "@/lib/types";
 
+const REMOTE_IMAGE_ACCEPT_HEADER = "image/avif,image/webp,image/png,image/jpeg,*/*;q=0.8";
+const REMOTE_FETCH_USER_AGENT =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+
 function toAbsoluteUrl(baseUrl: string, candidate: string | undefined | null) {
   if (!candidate) {
     return null;
@@ -278,8 +282,7 @@ export async function fetchProductImages(productUrl: string) {
   const safeUrl = await ensureSafeHttpUrl(productUrl);
   const response = await fetch(safeUrl, {
     headers: {
-      "user-agent":
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+      "user-agent": REMOTE_FETCH_USER_AGENT,
       accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
     },
     signal: AbortSignal.timeout(12000),
@@ -314,12 +317,19 @@ export async function fetchProductImages(productUrl: string) {
   return extractImageCandidatesFromHtml(html, safeUrl.toString());
 }
 
-export async function downloadRemoteImageAsFile(imageUrl: string) {
+function buildRemoteImageHeaders(url: URL) {
+  return {
+    accept: REMOTE_IMAGE_ACCEPT_HEADER,
+    "user-agent": REMOTE_FETCH_USER_AGENT,
+    referer: `${url.origin}/`,
+    origin: url.origin,
+  };
+}
+
+export async function fetchRemoteImageAsset(imageUrl: string) {
   const safeUrl = await ensureSafeHttpUrl(imageUrl);
   const response = await fetch(safeUrl, {
-    headers: {
-      accept: "image/avif,image/webp,image/png,image/jpeg,*/*;q=0.8",
-    },
+    headers: buildRemoteImageHeaders(safeUrl),
     signal: AbortSignal.timeout(15000),
   });
 
@@ -349,5 +359,15 @@ export async function downloadRemoteImageAsFile(imageUrl: string) {
   const extension = contentType.split("/")[1] ?? "png";
   const filename = pathname.includes(".") ? pathname : `${pathname}.${extension}`;
 
-  return new File([bytes], filename, { type: contentType });
+  return {
+    bytes,
+    contentType,
+    filename,
+  };
+}
+
+export async function downloadRemoteImageAsFile(imageUrl: string) {
+  const asset = await fetchRemoteImageAsset(imageUrl);
+
+  return new File([asset.bytes], asset.filename, { type: asset.contentType });
 }
