@@ -814,15 +814,15 @@ export function ListingLensApp() {
                 </div>
 
                 <div className="rounded-[1.35rem] border border-stone-200/80 bg-white/70 p-4">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
+                  <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
+                    <div className="min-w-0">
                       <p className="text-sm font-semibold text-stone-900">生成图 URL</p>
-                      <p className="text-xs leading-6 text-stone-500">
+                      <p className="truncate text-xs leading-6 text-stone-500">
                         支持直接复制，可用于回填到运营流程或人工复核。
                       </p>
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-2">
+                    <div className="inline-flex items-center gap-2 whitespace-nowrap self-start">
                       <button
                         type="button"
                         onClick={handleCopyResultUrl}
