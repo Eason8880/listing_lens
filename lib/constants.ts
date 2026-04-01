@@ -77,36 +77,42 @@ export const ASPECT_RATIO_OPTIONS: AspectRatioOption[] = [
     label: "1:1（方图）",
     description: "适合通用主图与宫格展示。",
     aspectRatio: "1 / 1",
+    requestSize: "1024x1024",
   },
   {
     id: "4:5",
     label: "4:5（竖版）",
     description: "适合信息流和移动端卡片。",
     aspectRatio: "4 / 5",
+    requestSize: "1024x1280",
   },
   {
     id: "3:4",
     label: "3:4（竖版）",
     description: "适合人物感更强的海报展示。",
     aspectRatio: "3 / 4",
+    requestSize: "1024x1365",
   },
   {
     id: "4:3",
     label: "4:3（标准横版）",
     description: "适合常规主图场景，默认更稳妥。",
     aspectRatio: "4 / 3",
+    requestSize: "1365x1024",
   },
   {
     id: "3:2",
     label: "3:2（横版）",
     description: "适合强调场景感和环境信息。",
     aspectRatio: "3 / 2",
+    requestSize: "1536x1024",
   },
   {
     id: "16:9",
     label: "16:9（宽横版）",
     description: "适合横幅、首屏和广告素材。",
     aspectRatio: "16 / 9",
+    requestSize: "1792x1024",
   },
 ];
 

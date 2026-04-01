@@ -40,7 +40,7 @@ export function buildGenerationPrompt({
     ? `Additional request from the merchant: ${customPrompt.trim()}`
     : "No extra merchant instructions were provided.";
   const aspectRatioInstruction = aspectRatio?.trim()
-    ? `Compose the final hero image in a ${aspectRatio.trim()} aspect ratio unless the original layout makes a tiny adjustment necessary.`
+    ? `The final output canvas must be exactly ${aspectRatio.trim()}. If the source image does not naturally fit, expand background, crop non-essential margins, or rebalance whitespace while keeping the product fully visible and commercially centered.`
     : "Keep an ecommerce-friendly output framing that stays faithful to the original composition.";
 
   return [

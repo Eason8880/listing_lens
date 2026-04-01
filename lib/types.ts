@@ -41,6 +41,7 @@ export interface AspectRatioOption {
   label: string;
   description: string;
   aspectRatio: string;
+  requestSize: string;
 }
 
 export interface ExtractedImageCandidate {

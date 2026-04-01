@@ -12,7 +12,7 @@ test("buildGenerationPrompt includes auto-detect behavior when source language i
 
   assert.match(prompt, /Detect whether the image contains existing text/i);
   assert.match(prompt, /English/);
-  assert.match(prompt, /4:3 aspect ratio/i);
+  assert.match(prompt, /must be exactly 4:3/i);
   assert.match(prompt, /premium ecommerce appeal/i);
 });
 
@@ -27,6 +27,6 @@ test("buildGenerationPrompt uses explicit source language when provided", () => 
 
   assert.match(prompt, /from 简体中文 into Deutsch/i);
   assert.match(prompt, /Keep the packaging visible/i);
-  assert.match(prompt, /1:1 aspect ratio/i);
+  assert.match(prompt, /must be exactly 1:1/i);
   assert.match(prompt, /Keep the original composition/i);
 });

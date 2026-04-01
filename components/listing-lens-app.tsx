@@ -71,6 +71,7 @@ export function ListingLensApp() {
   const [copied, setCopied] = useState(false);
   const [isExtracting, setIsExtracting] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isComparisonOpen, setIsComparisonOpen] = useState(false);
 
   useEffect(() => {
     const storedApiKey = window.localStorage.getItem(API_KEY_STORAGE_KEY);
@@ -98,13 +99,14 @@ export function ListingLensApp() {
   }, [apiKey]);
 
   useEffect(() => {
-    if (!isSettingsOpen) {
+    if (!isSettingsOpen && !isComparisonOpen) {
       return;
     }
 
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
         setIsSettingsOpen(false);
+        setIsComparisonOpen(false);
       }
     }
 
@@ -113,7 +115,7 @@ export function ListingLensApp() {
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [isSettingsOpen]);
+  }, [isSettingsOpen, isComparisonOpen]);
 
   const activePreset = PROMPT_PRESETS.find((preset) => preset.id === presetId) ?? PROMPT_PRESETS[1];
   const activeModel = MODEL_OPTIONS.find((item) => item.id === modelId) ?? MODEL_OPTIONS[0];
@@ -263,6 +265,8 @@ export function ListingLensApp() {
       body.append("prompt", prompt);
       body.append("n", "1");
       body.append("response_format", "url");
+      body.append("size", activeAspectRatio.requestSize);
+      body.append("aspect_ratio", aspectRatio);
       body.append("image", sourceFile, sourceFile.name);
 
       const response = await fetch(`${API_BASE_URL}/v1/images/edits`, {
@@ -314,6 +318,34 @@ export function ListingLensApp() {
     window.setTimeout(() => {
       setCopied(false);
     }, 1800);
+  }
+
+  async function handleDownloadResultImage() {
+    if (!result?.imageUrl) {
+      return;
+    }
+
+    try {
+      const response = await fetch(result.imageUrl);
+
+      if (!response.ok) {
+        throw new Error(`下载失败，服务端返回 ${response.status}。`);
+      }
+
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      const extension = blob.type.split("/")[1] || "png";
+
+      link.href = objectUrl;
+      link.download = `listinglens-result-${aspectRatio.replace(":", "x")}.${extension}`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(objectUrl);
+    } catch {
+      setFormError("当前图片源不支持直接下载，请先复制 URL 后在新标签页打开下载。");
+    }
   }
 
   function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
@@ -768,6 +800,7 @@ export function ListingLensApp() {
                   imageUrl={sourcePreview}
                   aspectRatio={activeAspectRatio.aspectRatio}
                   emptyState="上传主图，或先从商品 URL 中抓取并选择候选图。"
+                  onOpenImage={() => setIsComparisonOpen(true)}
                 />
 
                 <PreviewCard
@@ -776,6 +809,7 @@ export function ListingLensApp() {
                   imageUrl={result?.imageUrl ?? ""}
                   aspectRatio={activeAspectRatio.aspectRatio}
                   emptyState="完成配置后点击“生成优化图片”，这里会展示最终结果。"
+                  onOpenImage={() => setIsComparisonOpen(true)}
                 />
                 </div>
 
@@ -788,14 +822,24 @@ export function ListingLensApp() {
                       </p>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={handleCopyResultUrl}
-                      disabled={!result?.imageUrl}
-                      className="rounded-full border border-stone-300 bg-white px-4 py-2 text-sm font-medium text-stone-800 transition hover:border-stone-400 hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {copied ? "已复制" : "复制 URL"}
-                    </button>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleCopyResultUrl}
+                        disabled={!result?.imageUrl}
+                        className="rounded-full border border-stone-300 bg-white px-4 py-2 text-sm font-medium text-stone-800 transition hover:border-stone-400 hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {copied ? "已复制" : "复制 URL"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleDownloadResultImage}
+                        disabled={!result?.imageUrl}
+                        className="rounded-full border border-stone-300 bg-white px-4 py-2 text-sm font-medium text-stone-800 transition hover:border-stone-400 hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        下载图片
+                      </button>
+                    </div>
                   </div>
 
                   <div className="mt-3 rounded-[1.1rem] bg-stone-950 px-4 py-3 text-xs leading-6 text-stone-200">
@@ -890,6 +934,53 @@ export function ListingLensApp() {
           </section>
         </div>
       ) : null}
+
+      {isComparisonOpen ? (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-stone-950/80 px-4 py-4">
+          <button
+            type="button"
+            className="absolute inset-0 cursor-default"
+            aria-label="关闭对比预览"
+            onClick={() => setIsComparisonOpen(false)}
+          />
+          <section className="relative z-10 flex max-h-[92vh] w-full max-w-7xl flex-col overflow-hidden rounded-[1.75rem] border border-white/10 bg-stone-950 shadow-[0_32px_100px_rgba(0,0,0,0.45)]">
+            <div className="flex items-start justify-between gap-4 border-b border-white/10 px-4 py-3 sm:px-5">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-white">图片对比预览</p>
+                <p className="truncate text-xs text-stone-300">
+                  左侧查看原始主图，右侧查看生成结果，便于直接对比细节变化。
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsComparisonOpen(false)}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/5 text-stone-300 transition hover:bg-white/10 hover:text-white"
+                aria-label="关闭对比预览"
+              >
+                <CloseIcon />
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-auto bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.08),transparent_40%),linear-gradient(180deg,rgba(32,32,32,0.98),rgba(18,18,18,0.98))] p-4 sm:p-6">
+              <div className="grid min-w-[980px] gap-4 lg:grid-cols-2">
+                <ComparisonPreviewCard
+                  title="原始主图"
+                  subtitle={uploadMode === "file" ? "本地上传" : "URL 候选图"}
+                  imageUrl={sourcePreview}
+                  aspectRatio={activeAspectRatio.aspectRatio}
+                  emptyState="当前还没有可对比的原始主图。"
+                />
+                <ComparisonPreviewCard
+                  title="生成结果"
+                  subtitle={result ? "AI 输出" : "等待生成"}
+                  imageUrl={result?.imageUrl ?? ""}
+                  aspectRatio={activeAspectRatio.aspectRatio}
+                  emptyState="当前还没有生成结果图。"
+                />
+              </div>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </main>
   );
 }
@@ -909,12 +1000,14 @@ function PreviewCard({
   imageUrl,
   aspectRatio,
   emptyState,
+  onOpenImage,
 }: {
   title: string;
   subtitle: string;
   imageUrl: string;
   aspectRatio: string;
   emptyState: string;
+  onOpenImage: () => void;
 }) {
   return (
     <article className="overflow-hidden rounded-[1.5rem] border border-stone-200 bg-white">
@@ -930,9 +1023,60 @@ function PreviewCard({
         style={{ aspectRatio }}
       >
         {imageUrl ? (
-          <img src={imageUrl} alt={title} className="h-full w-full object-contain" />
+          <button
+            type="button"
+            onClick={onOpenImage}
+            className="group relative block h-full w-full cursor-zoom-in"
+            aria-label={`放大预览${title}`}
+          >
+            <img src={imageUrl} alt={title} className="h-full w-full object-contain" />
+            <div className="absolute inset-0 flex items-end justify-end bg-stone-950/0 p-3 opacity-0 transition group-hover:bg-stone-950/8 group-hover:opacity-100">
+              <span className="rounded-full bg-white/92 px-3 py-1 text-xs font-medium text-stone-800 shadow-sm">
+                点击放大
+              </span>
+            </div>
+          </button>
         ) : (
           <div className="flex h-full items-center justify-center p-6 text-center text-sm leading-7 text-stone-500">
+            {emptyState}
+          </div>
+        )}
+      </div>
+    </article>
+  );
+}
+
+function ComparisonPreviewCard({
+  title,
+  subtitle,
+  imageUrl,
+  aspectRatio,
+  emptyState,
+}: {
+  title: string;
+  subtitle: string;
+  imageUrl: string;
+  aspectRatio: string;
+  emptyState: string;
+}) {
+  return (
+    <article className="overflow-hidden rounded-[1.5rem] border border-white/10 bg-white/5 backdrop-blur-sm">
+      <div className="border-b border-white/10 px-4 py-3">
+        <p className="text-sm font-semibold text-white">{title}</p>
+        <p className="text-xs text-stone-300">{subtitle}</p>
+      </div>
+      <div
+        className="flex items-center justify-center bg-[linear-gradient(135deg,rgba(255,255,255,0.05),rgba(255,255,255,0.02))] p-4"
+        style={{ aspectRatio }}
+      >
+        {imageUrl ? (
+          <img
+            src={imageUrl}
+            alt={title}
+            className="max-h-full w-auto max-w-full rounded-[1.1rem] object-contain shadow-[0_18px_60px_rgba(0,0,0,0.35)]"
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center text-center text-sm leading-7 text-stone-300">
             {emptyState}
           </div>
         )}
