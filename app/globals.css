@@ -1,15 +1,23 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Manrope:wght@500;600;700;800&display=swap");
 @import "tailwindcss";
 
 :root {
-  --background: #f6efe5;
-  --foreground: #1d1a17;
-  --card: rgba(255, 248, 240, 0.78);
-  --card-strong: rgba(255, 251, 246, 0.92);
-  --border: rgba(67, 47, 28, 0.12);
-  --accent: #d66b2d;
-  --accent-strong: #b24c16;
-  --muted: #6f6257;
-  --shadow: 0 24px 80px rgba(72, 39, 14, 0.12);
+  --background: #f4f6f8;
+  --foreground: #171a1f;
+  --panel: rgba(255, 255, 255, 0.94);
+  --panel-soft: #f7f8fa;
+  --panel-muted: #eef2f5;
+  --border: rgba(23, 26, 31, 0.08);
+  --border-strong: rgba(201, 76, 22, 0.18);
+  --accent: #c84c17;
+  --accent-strong: #aa3600;
+  --accent-soft: #fff0e8;
+  --accent-ring: rgba(201, 76, 22, 0.18);
+  --muted: #667085;
+  --shadow: 0 24px 60px rgba(15, 23, 42, 0.08);
+  --shadow-soft: 0 12px 32px rgba(15, 23, 42, 0.05);
+  --font-body: "Inter";
+  --font-heading: "Manrope";
 }
 
 * {
@@ -25,19 +33,19 @@ body {
   margin: 0;
   color: var(--foreground);
   font-family:
-    "Avenir Next",
+    var(--font-body),
     "PingFang SC",
     "Hiragino Sans GB",
     "Microsoft YaHei",
     sans-serif;
   background:
-    radial-gradient(circle at top left, rgba(214, 107, 45, 0.18), transparent 28%),
-    radial-gradient(circle at top right, rgba(229, 196, 110, 0.24), transparent 32%),
-    linear-gradient(180deg, #fbf6ef 0%, #f3e7d8 100%);
+    radial-gradient(circle at top left, rgba(255, 141, 82, 0.16), transparent 24%),
+    radial-gradient(circle at top right, rgba(84, 191, 239, 0.1), transparent 26%),
+    linear-gradient(180deg, #f7f8fb 0%, #eef2f6 100%);
 }
 
 ::selection {
-  background: rgba(214, 107, 45, 0.25);
+  background: rgba(201, 76, 22, 0.18);
 }
 
 a {
@@ -51,24 +59,174 @@ select {
   font: inherit;
 }
 
+h1,
+h2,
+h3,
+h4,
+.font-heading,
+.dashboard-brand {
+  font-family:
+    var(--font-heading),
+    var(--font-body),
+    "PingFang SC",
+    sans-serif;
+}
+
+.dashboard-body {
+  font-family:
+    var(--font-body),
+    "PingFang SC",
+    "Hiragino Sans GB",
+    "Microsoft YaHei",
+    sans-serif;
+}
+
 @layer components {
-  .glass-panel {
-    background: var(--card);
-    backdrop-filter: blur(18px);
+  .dashboard-panel {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(249, 250, 251, 0.94));
     border: 1px solid var(--border);
     box-shadow: var(--shadow);
+    backdrop-filter: blur(18px);
   }
 
-  .glass-panel-strong {
-    background: var(--card-strong);
-    backdrop-filter: blur(18px);
-    border: 1px solid rgba(67, 47, 28, 0.14);
+  .dashboard-panel-soft {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(245, 247, 250, 0.98));
+    border: 1px solid rgba(23, 26, 31, 0.07);
+    box-shadow: var(--shadow-soft);
+  }
+
+  .dashboard-hero-panel {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(247, 249, 252, 0.92));
+    border: 1px solid rgba(23, 26, 31, 0.07);
     box-shadow: var(--shadow);
+    backdrop-filter: blur(16px);
+  }
+
+  .dashboard-panel-header {
+    border-bottom: 1px solid rgba(23, 26, 31, 0.06);
+    background:
+      radial-gradient(circle at top right, rgba(201, 76, 22, 0.08), transparent 34%),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(250, 251, 252, 0.92));
+  }
+
+  .dashboard-step-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    white-space: nowrap;
+    border-radius: 999px;
+    border: 1px solid rgba(23, 26, 31, 0.08);
+    background: rgba(255, 255, 255, 0.92);
+    padding: 0.45rem 0.8rem;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: #4b5563;
+    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
+  }
+
+  .dashboard-step-badge::before {
+    height: 0.45rem;
+    width: 0.45rem;
+    border-radius: 999px;
+    background: var(--accent);
+    content: "";
+  }
+
+  .dashboard-subpanel {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(246, 248, 250, 0.96));
+    border: 1px solid rgba(23, 26, 31, 0.07);
+    box-shadow: var(--shadow-soft);
+  }
+
+  .dashboard-icon-chip {
+    display: inline-flex;
+    height: 2.6rem;
+    width: 2.6rem;
+    align-items: center;
+    justify-content: center;
+    border-radius: 1rem;
+    background: var(--accent-soft);
+    color: var(--accent);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.82);
+  }
+
+  .dashboard-status-card {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(249, 250, 252, 0.94));
+    border: 1px solid rgba(23, 26, 31, 0.06);
+    box-shadow: var(--shadow-soft);
+  }
+
+  .dashboard-primary-button {
+    border-radius: 1rem;
+    background: linear-gradient(135deg, var(--accent) 0%, var(--accent-strong) 100%);
+    color: white;
+    box-shadow: 0 14px 28px rgba(201, 76, 22, 0.24);
+    transition:
+      transform 0.18s ease,
+      box-shadow 0.18s ease,
+      opacity 0.18s ease;
+  }
+
+  .dashboard-primary-button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 18px 34px rgba(201, 76, 22, 0.28);
+  }
+
+  .dashboard-secondary-button {
+    border-radius: 1rem;
+    border: 1px solid rgba(23, 26, 31, 0.1);
+    background: rgba(255, 255, 255, 0.94);
+    color: #1f2937;
+    box-shadow: var(--shadow-soft);
+    transition:
+      border-color 0.18s ease,
+      background 0.18s ease,
+      color 0.18s ease;
+  }
+
+  .dashboard-secondary-button:hover {
+    border-color: rgba(23, 26, 31, 0.16);
+    background: white;
+  }
+
+  .dashboard-dark-button {
+    border-radius: 1rem;
+    background: linear-gradient(180deg, #1a1d22 0%, #101318 100%);
+    color: white;
+    box-shadow: 0 18px 35px rgba(15, 23, 42, 0.18);
+    transition:
+      transform 0.18s ease,
+      box-shadow 0.18s ease,
+      opacity 0.18s ease;
+  }
+
+  .dashboard-dark-button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 22px 40px rgba(15, 23, 42, 0.22);
+  }
+
+  .dashboard-url-bar {
+    border-radius: 1.1rem;
+    background: linear-gradient(180deg, #171a20 0%, #101319 100%);
+    color: #edf2f7;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
+  }
+
+  .dashboard-preview-surface {
+    background:
+      radial-gradient(circle at top, rgba(255, 255, 255, 0.72), transparent 52%),
+      linear-gradient(180deg, #eef2f5 0%, #e2e7ed 100%);
+  }
+
+  .dashboard-preview-surface-accent {
+    background:
+      radial-gradient(circle at top, rgba(255, 255, 255, 0.68), transparent 46%),
+      linear-gradient(180deg, rgba(255, 244, 238, 0.98) 0%, rgba(244, 236, 231, 0.96) 100%);
   }
 
   .scrollbar-soft {
     scrollbar-width: thin;
-    scrollbar-color: rgba(162, 138, 114, 0.38) transparent;
+    scrollbar-color: rgba(148, 163, 184, 0.55) transparent;
   }
 
   .scrollbar-soft::-webkit-scrollbar {
@@ -82,13 +240,7 @@ select {
 
   .scrollbar-soft::-webkit-scrollbar-thumb {
     border-radius: 999px;
-    background: linear-gradient(180deg, rgba(193, 166, 138, 0.75), rgba(160, 131, 103, 0.58));
-    border: 2px solid transparent;
-    background-clip: padding-box;
-  }
-
-  .scrollbar-soft::-webkit-scrollbar-thumb:hover {
-    background: linear-gradient(180deg, rgba(184, 148, 112, 0.82), rgba(145, 113, 84, 0.7));
+    background: linear-gradient(180deg, rgba(148, 163, 184, 0.7), rgba(100, 116, 139, 0.7));
     border: 2px solid transparent;
     background-clip: padding-box;
   }
