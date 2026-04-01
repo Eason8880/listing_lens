@@ -380,8 +380,9 @@ export function ListingLensApp() {
           </div>
         </section>
 
-        <section className="grid gap-4 xl:h-[calc(100vh-12rem)] xl:grid-cols-[minmax(320px,0.72fr)_minmax(460px,1fr)_minmax(380px,0.82fr)]">
-          <div className="glass-panel flex overflow-hidden rounded-[1.75rem] xl:min-h-0 xl:flex-col">
+        <div className="overflow-x-auto pb-1">
+          <section className="grid min-w-[1360px] gap-4 h-[calc(100vh-12rem)] grid-cols-[minmax(320px,0.72fr)_minmax(460px,1fr)_minmax(380px,0.82fr)]">
+          <div className="glass-panel flex min-h-0 overflow-hidden rounded-[1.75rem] flex-col">
             <div className={PANEL_HEADER_CLASS}>
               <div>
                 <p className="text-sm font-semibold text-stone-900">生成配置</p>
@@ -550,7 +551,7 @@ export function ListingLensApp() {
             </div>
           </div>
 
-          <div className="glass-panel flex overflow-hidden rounded-[1.75rem] xl:min-h-0 xl:flex-col">
+          <div className="glass-panel flex min-h-0 overflow-hidden rounded-[1.75rem] flex-col">
             <div className={PANEL_HEADER_CLASS}>
               <div>
                 <p className="text-sm font-semibold text-stone-900">生成参数</p>
@@ -741,7 +742,7 @@ export function ListingLensApp() {
             </div>
           </div>
 
-          <div className="glass-panel flex overflow-hidden rounded-[1.75rem] xl:min-h-0 xl:flex-col">
+          <div className="glass-panel flex min-h-0 overflow-hidden rounded-[1.75rem] flex-col">
             <div className={PANEL_HEADER_CLASS}>
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold text-stone-900">预览与结果</p>
@@ -813,7 +814,8 @@ export function ListingLensApp() {
               </div>
             </div>
           </div>
-        </section>
+          </section>
+        </div>
       </div>
 
       {isSettingsOpen ? (
