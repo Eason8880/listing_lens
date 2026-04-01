@@ -1,4 +1,5 @@
-export const MODEL_OPTION_IDS = ["gemini-flash-4k", "nano-banana-4k"] as const;
+export const MODEL_FAMILY_IDS = ["gemini-flash", "nano-banana"] as const;
+export const RESOLUTION_IDS = ["1k", "2k", "4k"] as const;
 export const PROMPT_PRESET_IDS = [
   "layout-preserve",
   "localized-beauty",
@@ -13,14 +14,22 @@ export const ASPECT_RATIO_IDS = [
   "16:9",
 ] as const;
 
-export type ModelOptionId = (typeof MODEL_OPTION_IDS)[number];
+export type ModelFamilyId = (typeof MODEL_FAMILY_IDS)[number];
+export type ResolutionId = (typeof RESOLUTION_IDS)[number];
 export type PromptPresetId = (typeof PROMPT_PRESET_IDS)[number];
 export type AspectRatioId = (typeof ASPECT_RATIO_IDS)[number];
 
-export interface ModelOption {
-  id: ModelOptionId;
+export interface ModelFamilyOption {
+  id: ModelFamilyId;
   label: string;
   priceLabel: string;
+  description: string;
+  models: Record<ResolutionId, string>;
+}
+
+export interface ResolutionOption {
+  id: ResolutionId;
+  label: string;
   description: string;
 }
 
@@ -56,7 +65,8 @@ export interface GenerateImageRequest {
   aspectRatio: AspectRatioId;
   presetId: PromptPresetId;
   customPrompt?: string;
-  model: ModelOptionId;
+  modelFamily: ModelFamilyId;
+  resolution: ResolutionId;
   remoteImageUrl?: string;
   image?: File;
 }

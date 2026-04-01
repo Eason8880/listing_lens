@@ -8,22 +8,25 @@ import {
   API_KEY_STORAGE_KEY,
   ALLOWED_IMAGE_TYPES,
   ASPECT_RATIO_OPTIONS,
-  DEFAULT_MODEL_ID,
+  DEFAULT_MODEL_FAMILY_ID,
   DEFAULT_PRESET_ID,
   DEFAULT_ASPECT_RATIO_ID,
+  DEFAULT_RESOLUTION_ID,
   LANGUAGE_OPTIONS,
   MAX_REMOTE_IMAGE_BYTES,
   MAX_UPLOAD_BYTES,
-  MODEL_OPTIONS,
+  MODEL_FAMILY_OPTIONS,
   PROMPT_PRESETS,
+  RESOLUTION_OPTIONS,
 } from "@/lib/constants";
 import { buildGenerationPrompt } from "@/lib/prompt";
 import type {
   AspectRatioId,
   ExtractedImageCandidate,
   GenerateImageResponse,
-  ModelOptionId,
+  ModelFamilyId,
   PromptPresetId,
+  ResolutionId,
 } from "@/lib/types";
 
 type UploadMode = "file" | "url";
@@ -64,7 +67,8 @@ export function ListingLensApp() {
   const [aspectRatio, setAspectRatio] = useState<AspectRatioId>(DEFAULT_ASPECT_RATIO_ID);
   const [presetId, setPresetId] = useState<PromptPresetId>(DEFAULT_PRESET_ID);
   const [customPrompt, setCustomPrompt] = useState("");
-  const [modelId, setModelId] = useState<ModelOptionId>(DEFAULT_MODEL_ID);
+  const [modelFamilyId, setModelFamilyId] = useState<ModelFamilyId>(DEFAULT_MODEL_FAMILY_ID);
+  const [resolutionId, setResolutionId] = useState<ResolutionId>(DEFAULT_RESOLUTION_ID);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [filePreviewUrl, setFilePreviewUrl] = useState("");
   const [extractedImages, setExtractedImages] = useState<ExtractedImageCandidate[]>([]);
@@ -122,7 +126,11 @@ export function ListingLensApp() {
   }, [isSettingsOpen, isComparisonOpen]);
 
   const activePreset = PROMPT_PRESETS.find((preset) => preset.id === presetId) ?? PROMPT_PRESETS[1];
-  const activeModel = MODEL_OPTIONS.find((item) => item.id === modelId) ?? MODEL_OPTIONS[0];
+  const activeModelFamily =
+    MODEL_FAMILY_OPTIONS.find((item) => item.id === modelFamilyId) ?? MODEL_FAMILY_OPTIONS[0];
+  const activeResolution =
+    RESOLUTION_OPTIONS.find((item) => item.id === resolutionId) ?? RESOLUTION_OPTIONS[1];
+  const activeModelName = activeModelFamily.models[resolutionId];
   const activeAspectRatio =
     ASPECT_RATIO_OPTIONS.find((item) => item.id === aspectRatio) ?? ASPECT_RATIO_OPTIONS[0];
   const sourcePreview =
@@ -266,7 +274,7 @@ export function ListingLensApp() {
       });
 
       const body = new FormData();
-      body.append("model", activeModel.label);
+      body.append("model", activeModelName);
       body.append("prompt", prompt);
       body.append("n", "1");
       body.append("response_format", "url");
@@ -302,7 +310,7 @@ export function ListingLensApp() {
           ("revised_prompt" in payload && typeof payload.revised_prompt === "string"
             ? payload.revised_prompt
             : undefined),
-        model: activeModel.label,
+        model: activeModelName,
       });
     } catch (error) {
       setFormError(error instanceof Error ? error.message : "图片生成失败，请稍后重试。");
@@ -389,8 +397,8 @@ export function ListingLensApp() {
                   {APP_NAME}
                 </h1>
                 <p className="max-w-3xl text-sm leading-6 text-stone-600">
-                  把商品主图的本地化、翻译替字和电商视觉美化收进一个工作台里。
-                  上传图片或粘贴商品页链接，几步就能生成更适合目标市场的主图版本。
+                  把商品主图的文字本地化、画幅适配和电商视觉美化收进一个工作台。
+                  粘贴商品页链接或上传图片，配置目标语言与输出比例，几步生成适合目标市场的主图，结果支持一键复制 URL 或下载图片。
                 </p>
               </div>
             </div>
@@ -659,6 +667,36 @@ export function ListingLensApp() {
                 </div>
 
                 <div className="sm:col-span-2">
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <label className="block text-sm font-semibold text-stone-900">分辨率</label>
+                    <p className="text-xs text-stone-500">1K 极速 2K 平衡 4K 较慢</p>
+                  </div>
+                  <div className="grid gap-2 lg:grid-cols-3">
+                    {RESOLUTION_OPTIONS.map((resolution) => {
+                      const active = resolution.id === resolutionId;
+
+                      return (
+                        <button
+                          key={resolution.id}
+                          type="button"
+                          onClick={() => setResolutionId(resolution.id)}
+                          className={`rounded-[1.1rem] border px-3 py-2.5 text-left transition ${
+                            active
+                              ? "border-orange-500 bg-orange-50 shadow-lg shadow-orange-100"
+                              : "border-stone-200 bg-white hover:border-orange-300"
+                          }`}
+                        >
+                          <p className="text-sm font-semibold text-stone-900">{resolution.label}</p>
+                          <p className="mt-1.5 text-[12px] leading-5 text-stone-500">
+                            {resolution.description}
+                          </p>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="sm:col-span-2">
                   <label className="mb-2 block text-sm font-semibold text-stone-900">提示词预设</label>
                   <div className="grid gap-2 lg:grid-cols-3">
                     {PROMPT_PRESETS.map((preset) => {
@@ -697,14 +735,14 @@ export function ListingLensApp() {
                 <div className="sm:col-span-2">
                   <label className="mb-2 block text-sm font-semibold text-stone-900">模型选择</label>
                   <div className="grid gap-2 lg:grid-cols-2">
-                    {MODEL_OPTIONS.map((model) => {
-                      const active = model.id === modelId;
+                    {MODEL_FAMILY_OPTIONS.map((modelFamily) => {
+                      const active = modelFamily.id === modelFamilyId;
 
                       return (
                         <button
-                          key={model.id}
+                          key={modelFamily.id}
                           type="button"
-                          onClick={() => setModelId(model.id)}
+                          onClick={() => setModelFamilyId(modelFamily.id)}
                           className={`rounded-[1.2rem] border px-4 py-3 text-left transition ${
                             active
                               ? "border-stone-900 bg-stone-900 text-white shadow-xl shadow-stone-900/10"
@@ -713,13 +751,13 @@ export function ListingLensApp() {
                         >
                           <div className="flex items-start justify-between gap-3">
                             <div>
-                              <p className="text-sm font-semibold">{model.label}</p>
+                              <p className="text-sm font-semibold">{modelFamily.label}</p>
                               <p
                                 className={`mt-2 text-xs leading-6 ${
                                   active ? "text-stone-200" : "text-stone-500"
                                 }`}
                               >
-                                {model.description}
+                                {modelFamily.description}
                               </p>
                             </div>
                             <span
@@ -729,7 +767,7 @@ export function ListingLensApp() {
                                   : "bg-orange-100 text-orange-700"
                               }`}
                             >
-                              {model.priceLabel}
+                              {modelFamily.priceLabel}
                             </span>
                           </div>
                         </button>
@@ -770,8 +808,8 @@ export function ListingLensApp() {
                 </button>
 
                 <p className="text-sm text-stone-500">
-                  选择模型：<span className="font-medium text-stone-900">{activeModel.label}</span>，
-                  单次成本 {activeModel.priceLabel}
+                  当前模型：<span className="font-medium text-stone-900">{activeModelFamily.label}</span>，
+                  分辨率 {activeResolution.label}，单次成本 {activeModelFamily.priceLabel}
                 </p>
               </div>
               </div>

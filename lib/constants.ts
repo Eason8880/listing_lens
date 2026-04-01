@@ -1,30 +1,60 @@
 import type {
   AspectRatioOption,
   LanguageOption,
-  ModelOption,
+  ModelFamilyOption,
   PromptPreset,
+  ResolutionOption,
 } from "@/lib/types";
 
 export const APP_NAME = "ListingLens";
 export const API_BASE_URL = "https://api.bltcy.ai";
 export const API_KEY_STORAGE_KEY = "listinglens.apiKey";
 
-export const MODEL_OPTIONS: ModelOption[] = [
+export const MODEL_FAMILY_OPTIONS: ModelFamilyOption[] = [
   {
-    id: "gemini-flash-4k",
-    label: "gemini-3.1-flash-image-preview-4k",
+    id: "gemini-flash",
+    label: "Gemini 3.1 Flash",
     priceLabel: "0.1 元/张",
-    description: "默认模型，适合快速做主图本地化与风格提升。",
+    description: "默认系列，适合快速做主图本地化与电商视觉优化。",
+    models: {
+      "1k": "gemini-3.1-flash-image-preview",
+      "2k": "gemini-3.1-flash-image-preview-2k",
+      "4k": "gemini-3.1-flash-image-preview-4k",
+    },
   },
   {
-    id: "nano-banana-4k",
-    label: "nano-banana-2-4k",
+    id: "nano-banana",
+    label: "Nano Banana 2",
     priceLabel: "0.2 元/张",
-    description: "备选模型，适合需要更强视觉变化时使用。",
+    description: "备选系列，适合需要更强视觉变化与重绘时使用。",
+    models: {
+      "1k": "nano-banana-2",
+      "2k": "nano-banana-2-2k",
+      "4k": "nano-banana-2-4k",
+    },
   },
 ];
 
-export const DEFAULT_MODEL_ID = MODEL_OPTIONS[0].id;
+export const RESOLUTION_OPTIONS: ResolutionOption[] = [
+  {
+    id: "1k",
+    label: "1K",
+    description: "极速，适合快速预览。",
+  },
+  {
+    id: "2k",
+    label: "2K",
+    description: "平衡，默认清晰度。",
+  },
+  {
+    id: "4k",
+    label: "4K",
+    description: "较慢，适合精细输出。",
+  },
+];
+
+export const DEFAULT_MODEL_FAMILY_ID = MODEL_FAMILY_OPTIONS[0].id;
+export const DEFAULT_RESOLUTION_ID = "2k";
 
 export const PROMPT_PRESETS: PromptPreset[] = [
   {
