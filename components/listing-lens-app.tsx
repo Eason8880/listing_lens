@@ -270,7 +270,6 @@ export function ListingLensApp() {
       body.append("prompt", prompt);
       body.append("n", "1");
       body.append("response_format", "url");
-      body.append("size", activeAspectRatio.requestSize);
       body.append("aspect_ratio", aspectRatio);
       body.append("image", sourceFile, sourceFile.name);
 
