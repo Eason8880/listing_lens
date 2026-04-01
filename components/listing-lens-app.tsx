@@ -607,14 +607,14 @@ export function ListingLensApp() {
                           key={option.id}
                           type="button"
                           onClick={() => setAspectRatio(option.id)}
-                          className={`flex min-h-[7.5rem] flex-col justify-start rounded-[1.1rem] border px-3 py-2.5 text-left transition ${
+                          className={`flex min-h-[5.5rem] flex-col justify-start rounded-[1.1rem] border px-3 py-2 text-left transition ${
                             active
                               ? "border-orange-500 bg-orange-50 shadow-lg shadow-orange-100"
                               : "border-stone-200 bg-white hover:border-orange-300"
                           }`}
                         >
                           <p className="text-sm font-semibold text-stone-900">{option.label}</p>
-                          <p className="mt-1 text-[12px] leading-5 text-stone-500">{option.description}</p>
+                          <p className="mt-1 text-[12px] leading-[1.35rem] text-stone-500">{option.description}</p>
                         </button>
                       );
                     })}
@@ -727,7 +727,7 @@ export function ListingLensApp() {
                   type="button"
                   onClick={handleGenerate}
                   disabled={!canGenerate || isGenerating}
-                  className="inline-flex min-h-12 items-center justify-center rounded-full bg-orange-600 px-6 text-sm font-semibold text-white transition hover:bg-orange-700 disabled:cursor-not-allowed disabled:bg-orange-300"
+                  className="inline-flex min-h-12 whitespace-nowrap items-center justify-center rounded-full bg-orange-600 px-6 text-sm font-semibold text-white transition hover:bg-orange-700 disabled:cursor-not-allowed disabled:bg-orange-300"
                 >
                   {isGenerating ? "正在生成主图..." : "生成优化图片"}
                 </button>
