@@ -829,7 +829,7 @@ export function ListingLensApp() {
               <div>
                 <p className="text-sm font-semibold text-orange-700">API Key 设置</p>
                 <h2 className="mt-2 text-2xl font-semibold tracking-tight text-stone-950">
-                  管理本地预览所用的 BLTCY Key
+                  管理本地预览所用的 API Key
                 </h2>
                 <p className="mt-2 text-sm leading-7 text-stone-600">
                   密钥只保存在当前浏览器本地，不写入服务器环境变量。
@@ -861,7 +861,7 @@ export function ListingLensApp() {
                   type="password"
                   value={apiKey}
                   onChange={(event) => setApiKey(event.target.value)}
-                  placeholder="输入你的 BLTCY API Key，仅保存在当前浏览器本地"
+                  placeholder="输入你的 API Key，仅保存在当前浏览器本地"
                   autoComplete="off"
                   className={INPUT_BASE_CLASS}
                 />
