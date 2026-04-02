@@ -465,8 +465,8 @@ export function ListingLensApp() {
                         onClick={() => setUploadMode("file")}
                       />
                       <ModeCard
-                        title="商品 URL"
-                        description="适合从商品详情页直接提取候选主图。"
+                        title="商品图片 URL"
+                        description="适合从商品图片 URL 链接直接提取图片。"
                         active={uploadMode === "url"}
                         icon={<LinkModeIcon />}
                         onClick={() => setUploadMode("url")}
@@ -543,10 +543,10 @@ export function ListingLensApp() {
                   ) : (
                     <section className="dashboard-subpanel rounded-[1.6rem] p-4">
                       <div>
-                        <FieldHeading label="Product URL" title="商品链接" />
-                        <h3 className="font-heading text-lg font-bold text-slate-950">抓取候选主图</h3>
+                        <FieldHeading label="Product Image URL" title="商品图片链接" />
+                        <h3 className="font-heading text-lg font-bold text-slate-950">抓取商品图片</h3>
                         <p className="mt-1 text-xs leading-5 text-slate-500">
-                          输入商品详情页链接，服务端会提取主图候选供你选择。
+                          输入商品图片 URL 链接，服务端会提取图片。
                         </p>
                       </div>
 
@@ -564,7 +564,7 @@ export function ListingLensApp() {
                           disabled={isExtracting}
                           className="dashboard-dark-button inline-flex min-h-11 items-center justify-center px-5 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-45"
                         >
-                          {isExtracting ? "正在抓取候选图..." : "抓取候选主图"}
+                          {isExtracting ? "正在抓取图片..." : "抓取商品图片"}
                         </button>
 
                         {extractError ? (
@@ -845,7 +845,7 @@ export function ListingLensApp() {
                       subtitle={uploadMode === "file" ? "本地上传" : "URL 候选图"}
                       imageUrl={sourcePreview}
                       aspectRatio={activeAspectRatio.aspectRatio}
-                      emptyState="上传主图，或先从商品 URL 中抓取并选择候选图。"
+                      emptyState="上传主图，或先从商品图片 URL 中抓取并选择候选图。"
                       badge={sourcePreview ? "Source Ready" : ""}
                       onOpenImage={() => setIsComparisonOpen(true)}
                     />
