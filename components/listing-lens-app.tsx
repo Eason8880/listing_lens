@@ -478,7 +478,7 @@ export function ListingLensApp() {
                     <section className="dashboard-subpanel rounded-[1.6rem] p-4">
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
-                          <p className={FIELD_LABEL_CLASS}>Local Upload</p>
+                          <FieldHeading label="Local Upload" title="本地上传" />
                           <h3 className="font-heading text-lg font-bold text-slate-950">上传商品主图</h3>
                           <p className="mt-1 text-xs leading-5 text-slate-500">
                             支持 JPG、PNG、WEBP、AVIF，建议使用 2000px 以上原图。
@@ -543,7 +543,7 @@ export function ListingLensApp() {
                   ) : (
                     <section className="dashboard-subpanel rounded-[1.6rem] p-4">
                       <div>
-                        <p className={FIELD_LABEL_CLASS}>Product URL</p>
+                        <FieldHeading label="Product URL" title="商品链接" />
                         <h3 className="font-heading text-lg font-bold text-slate-950">抓取候选主图</h3>
                         <p className="mt-1 text-xs leading-5 text-slate-500">
                           输入商品详情页链接，服务端会提取主图候选供你选择。
@@ -577,8 +577,7 @@ export function ListingLensApp() {
                           <div className="space-y-3 pt-2">
                             <div className="flex items-center justify-between gap-3">
                               <div>
-                                <p className={FIELD_LABEL_CLASS}>Candidate Images</p>
-                                <p className="font-heading text-lg font-bold text-slate-950">候选主图</p>
+                                <FieldHeading label="Candidate Images" title="候选主图" />
                               </div>
                               <p className="text-xs text-slate-500">点击卡片即可选中</p>
                             </div>
@@ -652,7 +651,7 @@ export function ListingLensApp() {
                   <section className="dashboard-subpanel rounded-[1.6rem] p-4">
                     <div className="grid gap-4 sm:grid-cols-2">
                       <div>
-                        <label className={FIELD_LABEL_CLASS}>Source Language</label>
+                        <FieldHeading label="Source Language" title="源语言" />
                         <select
                           value={sourceLanguage}
                           onChange={(event) => setSourceLanguage(event.target.value)}
@@ -668,7 +667,7 @@ export function ListingLensApp() {
                       </div>
 
                       <div>
-                        <label className={FIELD_LABEL_CLASS}>Target Language</label>
+                        <FieldHeading label="Target Language" title="目标语言" />
                         <select
                           value={targetLanguage}
                           onChange={(event) => setTargetLanguage(event.target.value)}
@@ -685,7 +684,7 @@ export function ListingLensApp() {
 
                       <div className="sm:col-span-2">
                         <div className="mb-2 flex items-center justify-between gap-3">
-                          <label className={FIELD_LABEL_CLASS}>Aspect Ratio</label>
+                          <FieldHeading label="Aspect Ratio" title="输出画面比例" />
                           <span className="text-xs text-slate-500">固定输出构图方向与投放画幅</span>
                         </div>
                         <div className="grid gap-2 md:grid-cols-3">
@@ -703,7 +702,7 @@ export function ListingLensApp() {
 
                       <div className="sm:col-span-2">
                         <div className="mb-2 flex items-center justify-between gap-3">
-                          <label className={FIELD_LABEL_CLASS}>Resolution</label>
+                          <FieldHeading label="Resolution" title="分辨率" />
                           <p className="text-xs text-slate-500">1K 极速 2K 平衡 4K 较慢</p>
                         </div>
                         <div className="grid gap-2 lg:grid-cols-3">
@@ -721,7 +720,7 @@ export function ListingLensApp() {
 
                       <div className="sm:col-span-2">
                         <div className="mb-2 flex items-center justify-between gap-3">
-                          <label className={FIELD_LABEL_CLASS}>Creative Preset</label>
+                          <FieldHeading label="Creative Preset" title="提示词预设" />
                           <span className="text-xs text-slate-500">保留商品信息前提下定义输出语气</span>
                         </div>
                         <div className="grid gap-2 lg:grid-cols-3">
@@ -739,7 +738,7 @@ export function ListingLensApp() {
                       </div>
 
                       <div className="sm:col-span-2">
-                        <label className={FIELD_LABEL_CLASS}>Additional Notes</label>
+                        <FieldHeading label="Additional Notes" title="补充说明" />
                         <textarea
                           value={customPrompt}
                           onChange={(event) => setCustomPrompt(event.target.value)}
@@ -751,7 +750,7 @@ export function ListingLensApp() {
 
                       <div className="sm:col-span-2">
                         <div className="mb-2 flex items-center justify-between gap-3">
-                          <label className={FIELD_LABEL_CLASS}>Model Family</label>
+                          <FieldHeading label="Model Family" title="模型系列" />
                           <span className="text-xs text-slate-500">分辨率会自动映射到对应模型版本</span>
                         </div>
                         <div className="grid gap-2 lg:grid-cols-2">
@@ -1077,6 +1076,15 @@ function StatCard({ label, value }: { label: string; value: string }) {
     <div className="dashboard-status-card rounded-[1.35rem] px-4 py-4">
       <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</p>
       <p className="mt-2 font-heading text-lg font-bold leading-6 text-slate-950">{value}</p>
+    </div>
+  );
+}
+
+function FieldHeading({ label, title }: { label: string; title: string }) {
+  return (
+    <div className="space-y-1">
+      <p className={FIELD_LABEL_CLASS}>{label}</p>
+      <p className="font-heading text-lg font-bold text-slate-950">{title}</p>
     </div>
   );
 }
