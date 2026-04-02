@@ -447,7 +447,7 @@ export function ListingLensApp() {
             <section className="dashboard-panel flex min-h-0 flex-col overflow-hidden rounded-[2rem]">
               <PanelHeader
                 icon={<SourceIcon />}
-                title="Media Source"
+                title="图片来源"
                 subtitle="选择主图来源，再准备输入素材。"
                 step="Step 1"
               />
@@ -640,7 +640,7 @@ export function ListingLensApp() {
             <section className="dashboard-panel flex min-h-0 flex-col overflow-hidden rounded-[2rem]">
               <PanelHeader
                 icon={<ConfigureIcon />}
-                title="Configuration"
+                title="生成参数"
                 subtitle="配置语言、比例、分辨率、模型和补充说明。"
                 step="Step 2"
               />
@@ -811,8 +811,9 @@ export function ListingLensApp() {
                       type="button"
                       onClick={handleGenerate}
                       disabled={!canGenerate || isGenerating}
-                      className="dashboard-dark-button inline-flex min-h-12 items-center justify-center whitespace-nowrap px-6 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-45"
+                      className="dashboard-dark-button inline-flex min-h-12 items-center justify-center gap-2 whitespace-nowrap px-6 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-45"
                     >
+                      <MagicWandIcon />
                       {isGenerating ? "正在生成主图..." : "生成优化图片"}
                     </button>
                   </div>
@@ -823,7 +824,7 @@ export function ListingLensApp() {
             <section className="dashboard-panel flex min-h-0 flex-col overflow-hidden rounded-[2rem]">
               <PanelHeader
                 icon={<PreviewPanelIcon />}
-                title="Preview & Result"
+                title="预览与结果"
                 subtitle="左看输入图，右看生成图，结果 URL 支持复制与下载。"
                 step="Step 3"
               />
@@ -1436,6 +1437,17 @@ function SparkIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5">
       <path d="M12 2.5 13.9 8l5.6 1.9-5.6 1.9L12 17.5l-1.9-5.7L4.5 9.9 10.1 8 12 2.5Zm6 11 1 2.8 2.8 1-2.8 1-1 2.7-1-2.7-2.7-1 2.7-1 1-2.8Z" />
+    </svg>
+  );
+}
+
+function MagicWandIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" className="h-4.5 w-4.5 shrink-0">
+      <path strokeLinecap="round" strokeLinejoin="round" d="m4 20 8.7-8.7" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="m11.5 5.5 1-2.5 1 2.5 2.5 1-2.5 1-1 2.5-1-2.5-2.5-1 2.5-1Z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="m17.5 12.5.7-1.7.7 1.7 1.7.7-1.7.7-.7 1.7-.7-1.7-1.7-.7 1.7-.7Z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="m14.2 9.8 2 2-7.6 7.6a1.4 1.4 0 0 1-2 0l-.4-.4a1.4 1.4 0 0 1 0-2l7.6-7.6Z" />
     </svg>
   );
 }
