@@ -743,7 +743,7 @@ export function ListingLensApp() {
                           value={customPrompt}
                           onChange={(event) => setCustomPrompt(event.target.value)}
                           rows={3}
-                          placeholder="例如：保留包装盒位置，突出防水卖点，整体风格更偏 Amazon 北美市场。"
+                          placeholder="例如：保留产品当前位置，突出防水卖点，整体风格更偏 TikTokShop 菲律宾市场。"
                           className={cx(INPUT_BASE_CLASS, "min-h-28 resize-y")}
                         />
                       </div>
