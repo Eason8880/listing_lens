@@ -447,6 +447,7 @@ export function ListingLensApp() {
             <section className="dashboard-panel flex min-h-0 flex-col overflow-hidden rounded-[2rem]">
               <PanelHeader
                 icon={<SourceIcon />}
+                label="Media Source"
                 title="图片来源"
                 subtitle="选择主图来源，再准备输入素材。"
                 step="Step 1"
@@ -640,6 +641,7 @@ export function ListingLensApp() {
             <section className="dashboard-panel flex min-h-0 flex-col overflow-hidden rounded-[2rem]">
               <PanelHeader
                 icon={<ConfigureIcon />}
+                label="Configuration"
                 title="生成参数"
                 subtitle="配置语言、比例、分辨率、模型和补充说明。"
                 step="Step 2"
@@ -824,6 +826,7 @@ export function ListingLensApp() {
             <section className="dashboard-panel flex min-h-0 flex-col overflow-hidden rounded-[2rem]">
               <PanelHeader
                 icon={<PreviewPanelIcon />}
+                label="Preview & Result"
                 title="预览与结果"
                 subtitle="左看输入图，右看生成图，结果 URL 支持复制与下载。"
                 step="Step 3"
@@ -1043,11 +1046,13 @@ export function ListingLensApp() {
 
 function PanelHeader({
   icon,
+  label,
   title,
   subtitle,
   step,
 }: {
   icon: ReactNode;
+  label: string;
   title: string;
   subtitle: string;
   step: string;
@@ -1057,9 +1062,7 @@ function PanelHeader({
       <div className="flex min-w-0 items-start gap-3">
         <span className="dashboard-icon-chip shrink-0">{icon}</span>
         <div className="min-w-0">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-            {title}
-          </p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</p>
           <p className="mt-1 font-heading text-xl font-bold text-slate-950">{title}</p>
           <p className="mt-1 truncate text-sm text-slate-500">{subtitle}</p>
         </div>
