@@ -415,7 +415,7 @@ export function ListingLensApp() {
                   {APP_NAME}
                 </h1>
                 <p className="max-w-3xl text-[15px] leading-7 text-slate-600">
-                  把商品主图的文字本地化、画幅适配和电商视觉美化收进一个工作台。粘贴商品页链接或上传图片，
+                  把商品主图的文字本地化、画幅适配和电商视觉美化收进一个工作台。粘贴商品图片链接或上传图片，
                   配置目标语言与输出比例，几步生成适合目标市场的主图，结果支持一键复制 URL 或下载图片。
                 </p>
               </div>
