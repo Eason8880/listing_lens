@@ -592,7 +592,6 @@ export function ListingLensApp() {
                                     type="button"
                                     onClick={() => {
                                       setSelectedImageUrl(image.url);
-                                      setResult(null);
                                       setFormError("");
                                     }}
                                     className={cx(
