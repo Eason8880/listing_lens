@@ -92,6 +92,9 @@ export function ListingLensApp() {
   const [isExtracting, setIsExtracting] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isComparisonOpen, setIsComparisonOpen] = useState(false);
+  const [extractSellingPoints, setExtractSellingPoints] = useState(false);
+  const [sellingPointsTranslation, setSellingPointsTranslation] = useState<string | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   useEffect(() => {
     const storedApiKey = window.localStorage.getItem(API_KEY_STORAGE_KEY);
@@ -250,6 +253,57 @@ export function ListingLensApp() {
     }
   }
 
+  const VISION_MODELS = [
+    "gemini-3.1-flash-lite-preview",
+    "gpt-5.4-nano",
+    "gpt-5.3-codex",
+    "gemini-3.1-pro-preview",
+  ];
+
+  async function analyzeSellingPoints(imageUrl: string): Promise<string> {
+    for (const model of VISION_MODELS) {
+      try {
+        const response = await fetch(`${API_BASE_URL}/v1/chat/completions`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${apiKey.trim()}`,
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: JSON.stringify({
+            model,
+            messages: [
+              {
+                role: "user",
+                content: [
+                  { type: "image_url", image_url: { url: imageUrl } },
+                  {
+                    type: "text",
+                    text: `请识别图片中所有卖点文字（短语或关键词），以"原文 → 中文翻译"的格式逐行列出。如果图中没有文字，回复"未检测到卖点文字"。只列出文字内容，不需要其他解释。`,
+                  },
+                ],
+              },
+            ],
+            max_tokens: 500,
+          }),
+        });
+
+        if (!response.ok) continue;
+
+        const data = (await response.json()) as {
+          choices?: Array<{ message?: { content?: string } }>;
+        };
+        const content = data?.choices?.[0]?.message?.content;
+        if (typeof content === "string" && content.trim()) {
+          return content.trim();
+        }
+      } catch {
+        // try next model
+      }
+    }
+    throw new Error("卖点识别失败，所有模型均无响应。");
+  }
+
   async function handleGenerate() {
     if (!apiKey.trim()) {
       setFormError("请先点击右上角齿轮设置 API Key，密钥只会保存在当前浏览器本地。");
@@ -274,6 +328,7 @@ export function ListingLensApp() {
     setIsGenerating(true);
     setFormError("");
     setCopied(false);
+    setSellingPointsTranslation(null);
 
     try {
       const sourceFile = await resolveSourceFile();
@@ -283,6 +338,7 @@ export function ListingLensApp() {
         aspectRatio,
         presetId,
         customPrompt: customPrompt.trim() || undefined,
+        extractSellingPoints,
       });
 
       const body = new FormData();
@@ -314,8 +370,9 @@ export function ListingLensApp() {
         throw new Error(errorMessage);
       }
 
+      const generatedImageUrl = resultPayload.url;
       setResult({
-        imageUrl: resultPayload.url,
+        imageUrl: generatedImageUrl,
         revisedPrompt:
           (typeof resultPayload.revised_prompt === "string" && resultPayload.revised_prompt) ||
           ("revised_prompt" in payload && typeof payload.revised_prompt === "string"
@@ -323,6 +380,18 @@ export function ListingLensApp() {
             : undefined),
         model: activeModelName,
       });
+
+      if (extractSellingPoints) {
+        setIsAnalyzing(true);
+        try {
+          const translation = await analyzeSellingPoints(generatedImageUrl);
+          setSellingPointsTranslation(translation);
+        } catch {
+          setSellingPointsTranslation("卖点识别失败，请手动查看图片。");
+        } finally {
+          setIsAnalyzing(false);
+        }
+      }
     } catch (error) {
       setFormError(error instanceof Error ? error.message : "图片生成失败，请稍后重试。");
     } finally {
@@ -734,6 +803,41 @@ export function ListingLensApp() {
                             />
                           ))}
                         </div>
+                        <button
+                          type="button"
+                          onClick={() => setExtractSellingPoints(!extractSellingPoints)}
+                          className={cx(
+                            "mt-3 w-full rounded-[1.2rem] border px-4 py-3 text-left transition",
+                            extractSellingPoints
+                              ? "border-[color:var(--border-strong)] bg-[linear-gradient(180deg,rgba(255,241,233,0.98),rgba(255,249,245,1))] ring-2 ring-[color:var(--accent-ring)]"
+                              : "border-slate-200 bg-white hover:border-[color:var(--border-strong)] hover:bg-white",
+                          )}
+                        >
+                          <div className="flex items-center gap-3">
+                            <span className={cx(
+                              "dashboard-icon-chip h-9 w-9 shrink-0 rounded-[0.75rem] text-base transition",
+                              extractSellingPoints ? "bg-white text-[color:var(--accent)]" : "bg-slate-100 text-slate-400",
+                            )}>
+                              <SparkIcon />
+                            </span>
+                            <div className="min-w-0 flex-1">
+                              <p className="font-heading text-sm font-bold text-slate-950">提炼图片卖点</p>
+                              <p className="mt-0.5 text-xs leading-5 text-slate-500">叠加设计感目标语言卖点文字，生成后提供中文对照</p>
+                            </div>
+                            <span className={cx(
+                              "flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition",
+                              extractSellingPoints
+                                ? "border-[color:var(--accent)] bg-[color:var(--accent)] text-white"
+                                : "border-slate-300 bg-white",
+                            )}>
+                              {extractSellingPoints && (
+                                <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+                                  <path d="M1 4l2.5 2.5L9 1" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                                </svg>
+                              )}
+                            </span>
+                          </div>
+                        </button>
                       </div>
 
                       <div className="sm:col-span-2">
@@ -896,6 +1000,22 @@ export function ListingLensApp() {
                     <div className="dashboard-url-bar mt-3 px-4 py-3 text-xs leading-6">
                       {result?.imageUrl || "生成完成后，这里会展示服务商返回的图片 URL。"}
                     </div>
+
+                    {extractSellingPoints && (isAnalyzing || sellingPointsTranslation) ? (
+                      <div className="mt-4 rounded-[1.2rem] border border-orange-200 bg-[linear-gradient(180deg,rgba(255,242,235,0.95),rgba(255,250,246,0.98))] px-4 py-4">
+                        <p className={FIELD_LABEL_CLASS}>Selling Points</p>
+                        <p className="font-heading text-base font-bold text-slate-950">
+                          卖点文字识别
+                        </p>
+                        {isAnalyzing ? (
+                          <p className="mt-2 text-xs leading-6 text-slate-500">正在识别图片中的卖点文字…</p>
+                        ) : (
+                          <p className="mt-2 whitespace-pre-wrap text-xs leading-6 text-slate-600">
+                            {sellingPointsTranslation}
+                          </p>
+                        )}
+                      </div>
+                    ) : null}
 
                     {result?.revisedPrompt ? (
                       <div className="mt-4 rounded-[1.2rem] border border-slate-200 bg-slate-50 px-4 py-4">
@@ -1263,6 +1383,8 @@ function ModelFamilyCard({
   );
 }
 
+const RETRY_DELAYS = [2000, 4000, 8000];
+
 function PreviewCard({
   eyebrow,
   title,
@@ -1284,6 +1406,30 @@ function PreviewCard({
   accent?: boolean;
   onOpenImage: () => void;
 }) {
+  const [attempt, setAttempt] = useState(0);
+  const [retrying, setRetrying] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    setAttempt(0);
+    setRetrying(false);
+    setFailed(false);
+    return () => { if (retryTimerRef.current) clearTimeout(retryTimerRef.current); };
+  }, [imageUrl]);
+
+  function handleImgError() {
+    if (attempt < RETRY_DELAYS.length) {
+      setRetrying(true);
+      retryTimerRef.current = setTimeout(() => {
+        setAttempt((n) => n + 1);
+        setRetrying(false);
+      }, RETRY_DELAYS[attempt]);
+    } else {
+      setFailed(true);
+    }
+  }
+
   return (
     <article
       className={cx(
@@ -1315,27 +1461,47 @@ function PreviewCard({
 
       <div className={cx(accent ? "dashboard-preview-surface-accent" : "dashboard-preview-surface")} style={{ aspectRatio }}>
         {imageUrl ? (
-          <button
-            type="button"
-            onClick={onOpenImage}
-            className="group relative block h-full w-full cursor-zoom-in p-4"
-            aria-label={`放大预览${title}`}
-          >
-            <img
-              src={imageUrl}
-              alt={title}
-              className={cx(
-                "h-full w-full rounded-[1.35rem] object-contain",
-                accent
-                  ? "shadow-[0_20px_48px_rgba(201,76,22,0.18)]"
-                  : "shadow-[0_18px_38px_rgba(15,23,42,0.1)]",
-              )}
-            />
-            <div className="absolute inset-x-4 bottom-4 flex items-center justify-between rounded-[1.05rem] bg-white/86 px-3 py-2 text-xs text-slate-600 opacity-0 shadow-[0_12px_28px_rgba(15,23,42,0.08)] backdrop-blur-md transition group-hover:opacity-100">
-              <span className="font-semibold text-slate-900">{title}</span>
-              <span>点击放大对比</span>
+          failed ? (
+            <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
+              <p className="text-sm text-slate-500">图片加载失败</p>
+              <a
+                href={imageUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="rounded-full bg-[var(--accent-soft)] px-4 py-1.5 text-xs font-semibold text-[color:var(--accent)] transition hover:opacity-80"
+              >
+                在新标签页打开
+              </a>
             </div>
-          </button>
+          ) : retrying ? (
+            <div className="flex h-full items-center justify-center p-6 text-center">
+              <p className="text-xs text-slate-400">图片加载中，第 {attempt + 1} 次重试…</p>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={onOpenImage}
+              className="group relative block h-full w-full cursor-zoom-in p-4"
+              aria-label={`放大预览${title}`}
+            >
+              <img
+                key={attempt}
+                src={imageUrl}
+                alt={title}
+                onError={handleImgError}
+                className={cx(
+                  "h-full w-full rounded-[1.35rem] object-contain",
+                  accent
+                    ? "shadow-[0_20px_48px_rgba(201,76,22,0.18)]"
+                    : "shadow-[0_18px_38px_rgba(15,23,42,0.1)]",
+                )}
+              />
+              <div className="absolute inset-x-4 bottom-4 flex items-center justify-between rounded-[1.05rem] bg-white/86 px-3 py-2 text-xs text-slate-600 opacity-0 shadow-[0_12px_28px_rgba(15,23,42,0.08)] backdrop-blur-md transition group-hover:opacity-100">
+                <span className="font-semibold text-slate-900">{title}</span>
+                <span>点击放大对比</span>
+              </div>
+            </button>
+          )
         ) : (
           <div className="flex h-full items-center justify-center p-6 text-center text-sm leading-7 text-slate-500">
             {emptyState}
