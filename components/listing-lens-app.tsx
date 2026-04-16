@@ -101,6 +101,8 @@ export function ListingLensApp() {
 
     if (storedApiKey) {
       setApiKey(storedApiKey);
+    } else {
+      setIsSettingsOpen(true);
     }
   }, []);
 
