@@ -7,6 +7,29 @@ async function requireImageGenerationModule() {
   return imageGenerationModule;
 }
 
+test("all model family price labels use 元/张 wording", async () => {
+  const constantsModule = await import("@/lib/constants").catch(() => null);
+  assert.ok(constantsModule, "Expected @/lib/constants to exist.");
+
+  const { MODEL_FAMILY_OPTIONS } = constantsModule;
+
+  for (const modelFamily of MODEL_FAMILY_OPTIONS) {
+    assert.match(
+      modelFamily.priceLabel,
+      /元\/张$/,
+      `Expected ${modelFamily.id} base price label to use 元/张 wording.`,
+    );
+
+    for (const priceLabel of Object.values(modelFamily.priceLabelByResolution ?? {})) {
+      assert.match(
+        priceLabel,
+        /元\/张$/,
+        `Expected ${modelFamily.id} resolution price label to use 元/张 wording.`,
+      );
+    }
+  }
+});
+
 test("buildGenerationAttempts creates a Nano Banana Pro fallback chain per resolution", async () => {
   const { buildGenerationAttempts } = await requireImageGenerationModule();
 
@@ -192,7 +215,7 @@ test("normalizeGeneratedImageResult converts b64_json payloads into local-only p
   assert.match(result.analysisImageUrl, /^data:image\/png;base64,QUJD$/);
   assert.equal(result.deliveryKind, "local-data");
   assert.equal(result.actualModelLabel, "OpenAI GPT 1.5");
-  assert.equal(result.actualPriceLabel, "0.05 元/次");
+  assert.equal(result.actualPriceLabel, "0.05 元/张");
   assert.equal(result.usedFallback, false);
   assert.equal(result.revisedPrompt, "make the scene brighter");
 });

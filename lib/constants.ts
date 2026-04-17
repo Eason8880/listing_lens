@@ -46,7 +46,7 @@ export const MODEL_FAMILY_OPTIONS: ModelFamilyOption[] = [
   {
     id: "doubao-seedream",
     label: "Doubao SeeDream 5.0",
-    priceLabel: "0.15 元/次",
+    priceLabel: "0.15 元/张",
     description: "适合按明确尺寸输出并兼顾商品主体保真。",
     baseModel: "doubao-seedream-5-0-260128",
     requestStrategy: "generations-json-size",
@@ -54,7 +54,7 @@ export const MODEL_FAMILY_OPTIONS: ModelFamilyOption[] = [
   {
     id: "gpt-image-1-5",
     label: "OpenAI GPT 1.5",
-    priceLabel: "0.05 元/次",
+    priceLabel: "0.05 元/张",
     description: "适合使用 OpenAI 原生编辑尺寸输出方图、竖图和横图。",
     baseModel: "gpt-image-1.5",
     requestStrategy: "edits-size",
@@ -64,7 +64,7 @@ export const MODEL_FAMILY_OPTIONS: ModelFamilyOption[] = [
   {
     id: "gemini-pro-preview",
     label: "Gemini 3 Pro Preview",
-    priceLabel: "0.2 元/次",
+    priceLabel: "0.2 元/张",
     description: "Nano Banana Pro 失败后的自动回退模型。",
     baseModel: "gemini-3-pro-image-preview",
     requestStrategy: "edits-model-name",
