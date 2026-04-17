@@ -26,6 +26,18 @@ import {
   PROMPT_PRESETS,
   RESOLUTION_OPTIONS,
 } from "@/lib/constants";
+import {
+  buildGenerationAttempts,
+  coerceGenerationSelection,
+  getModelFamilyDisplayAttempt,
+  getResolutionPriceChangeNotice,
+  getSupportedAspectRatioIds,
+  getSupportedResolutionIds,
+  normalizeGeneratedImageResult,
+  supportsSellingPointExtraction,
+  type GenerationAttempt,
+  type ImageApiPayload,
+} from "@/lib/image-generation";
 import { buildGenerationPrompt } from "@/lib/prompt";
 import type {
   AspectRatioId,
@@ -38,16 +50,12 @@ import type {
 
 type UploadMode = "file" | "url";
 
-type ImagesEditApiResponse = {
-  data?: Array<{
-    url?: string;
-    revised_prompt?: string;
-  }>;
-  revised_prompt?: string;
-  message?: string;
-  error?: {
-    message?: string;
-  };
+type GenerateImageApiResponse = {
+  payload?: ImageApiPayload;
+  attempt?: GenerationAttempt;
+  requestedModelFamilyId?: ModelFamilyId;
+  requestedModel?: string;
+  error?: string;
 };
 
 const INPUT_BASE_CLASS =
@@ -65,6 +73,20 @@ function cx(...classes: Array<string | false | null | undefined>) {
 
 function buildProxyImageUrl(imageUrl: string) {
   return imageUrl ? `/api/image-proxy?url=${encodeURIComponent(imageUrl)}` : "";
+}
+
+function getMimeTypeFromDataUrl(dataUrl: string) {
+  const matches = dataUrl.match(/^data:(image\/[^;]+);base64,/i);
+
+  return matches?.[1]?.toLowerCase() || "image/png";
+}
+
+function getExtensionFromMimeType(mimeType: string) {
+  if (mimeType === "image/jpeg") {
+    return "jpg";
+  }
+
+  return mimeType.split("/")[1] || "png";
 }
 
 export function ListingLensApp() {
@@ -88,6 +110,8 @@ export function ListingLensApp() {
   const [result, setResult] = useState<GenerateImageResponse | null>(null);
   const [formError, setFormError] = useState("");
   const [extractError, setExtractError] = useState("");
+  const [selectionNotice, setSelectionNotice] = useState("");
+  const [resolutionNotice, setResolutionNotice] = useState("");
   const [copied, setCopied] = useState(false);
   const [isExtracting, setIsExtracting] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -113,6 +137,14 @@ export function ListingLensApp() {
       }
     };
   }, [filePreviewUrl]);
+
+  useEffect(() => {
+    return () => {
+      if (result?.deliveryKind === "local-data" && result.imageUrl.startsWith("blob:")) {
+        URL.revokeObjectURL(result.imageUrl);
+      }
+    };
+  }, [result]);
 
   useEffect(() => {
     if (!apiKey) {
@@ -145,18 +177,75 @@ export function ListingLensApp() {
   const activePreset = PROMPT_PRESETS.find((preset) => preset.id === presetId) ?? PROMPT_PRESETS[1];
   const activeModelFamily =
     MODEL_FAMILY_OPTIONS.find((item) => item.id === modelFamilyId) ?? MODEL_FAMILY_OPTIONS[0];
+  const selectableModelFamilies = MODEL_FAMILY_OPTIONS.filter((item) => item.selectable !== false);
+  const supportedAspectRatioIds = getSupportedAspectRatioIds(activeModelFamily.id);
+  const supportedResolutionIds = getSupportedResolutionIds(activeModelFamily.id);
+  const visibleAspectRatioOptions = ASPECT_RATIO_OPTIONS.filter((item) =>
+    supportedAspectRatioIds.includes(item.id),
+  );
   const activeResolution =
     RESOLUTION_OPTIONS.find((item) => item.id === resolutionId) ?? RESOLUTION_OPTIONS[1];
-  const activeModelName = activeModelFamily.models[resolutionId];
   const activeAspectRatio =
     ASPECT_RATIO_OPTIONS.find((item) => item.id === aspectRatio) ?? ASPECT_RATIO_OPTIONS[0];
+  const primaryAttempt = buildGenerationAttempts({
+    modelFamilyId: activeModelFamily.id,
+    resolutionId,
+    aspectRatioId: aspectRatio,
+  })[0];
+  const activeModelName = primaryAttempt.model;
   const sourcePreview =
     uploadMode === "file" ? filePreviewUrl : buildProxyImageUrl(selectedImageUrl);
+  const resultAspectRatio =
+    ASPECT_RATIO_OPTIONS.find((item) => item.id === result?.aspectRatioId) ?? activeAspectRatio;
+  const resultResolution =
+    RESOLUTION_OPTIONS.find((item) => item.id === result?.resolutionId) ?? activeResolution;
+  const requestedResultModelFamily =
+    MODEL_FAMILY_OPTIONS.find((item) => item.id === result?.requestedModelFamilyId) ??
+    activeModelFamily;
+  const resultModelLabel = result?.actualModelLabel ?? activeModelFamily.label;
+  const resultDeliveryDescription =
+    result?.deliveryKind === "local-data" || (!result && activeModelFamily.id === "gpt-image-1-5")
+      ? "该模型结果仅支持当前浏览器内预览与下载，不提供外链 URL。"
+      : "支持直接复制，可用于回填运营流程、人工复核或跳转原图下载。";
+  const canExtractSellingPoints = supportsSellingPointExtraction({
+    modelFamilyId: activeModelFamily.id,
+    resolutionId,
+    aspectRatioId: aspectRatio,
+  });
   const canGenerate =
     apiKey.trim().length > 0 &&
     targetLanguage.trim().length > 0 &&
     ((uploadMode === "file" && Boolean(selectedFile)) ||
       (uploadMode === "url" && Boolean(selectedImageUrl)));
+
+  function handleModelFamilyChange(nextModelFamilyId: ModelFamilyId) {
+    const nextSelection = coerceGenerationSelection({
+      modelFamilyId: nextModelFamilyId,
+      aspectRatioId: aspectRatio,
+      resolutionId,
+    });
+    const nextCanExtractSellingPoints = supportsSellingPointExtraction({
+      modelFamilyId: nextModelFamilyId,
+      resolutionId: nextSelection.resolutionId,
+      aspectRatioId: nextSelection.aspectRatioId,
+    });
+    const notices = [nextSelection.message];
+
+    if (!nextCanExtractSellingPoints && extractSellingPoints) {
+      notices.push("当前模型返回本地预览图片，不支持提炼图片卖点，已自动关闭该功能。");
+    }
+
+    setModelFamilyId(nextModelFamilyId);
+    setAspectRatio(nextSelection.aspectRatioId);
+    setResolutionId(nextSelection.resolutionId);
+    setSelectionNotice(notices.filter(Boolean).join(" "));
+    setResolutionNotice("");
+    if (!nextCanExtractSellingPoints && extractSellingPoints) {
+      setExtractSellingPoints(false);
+      setSellingPointsTranslation(null);
+    }
+    setFormError("");
+  }
 
   async function resolveSourceFile() {
     if (uploadMode === "file" && selectedFile) {
@@ -342,16 +431,14 @@ export function ListingLensApp() {
         customPrompt: customPrompt.trim() || undefined,
         extractSellingPoints,
       });
-
       const body = new FormData();
-      body.append("model", activeModelName);
       body.append("prompt", prompt);
-      body.append("n", "1");
-      body.append("response_format", "url");
-      body.append("aspect_ratio", aspectRatio);
+      body.append("modelFamilyId", activeModelFamily.id);
+      body.append("resolutionId", resolutionId);
+      body.append("aspectRatioId", aspectRatio);
       body.append("image", sourceFile, sourceFile.name);
 
-      const response = await fetch(`${API_BASE_URL}/v1/images/edits`, {
+      const response = await fetch("/api/generate-image", {
         method: "POST",
         headers: {
           Authorization: `Bearer ${apiKey.trim()}`,
@@ -359,34 +446,33 @@ export function ListingLensApp() {
         },
         body,
       });
+      const payload = (await response.json()) as GenerateImageApiResponse;
 
-      const payload = (await response.json()) as ImagesEditApiResponse;
-      const resultPayload = Array.isArray(payload.data) ? payload.data[0] : undefined;
-
-      if (!response.ok || typeof resultPayload?.url !== "string") {
-        const errorMessage =
-          (typeof payload.error?.message === "string" && payload.error.message) ||
-          (typeof payload.message === "string" && payload.message) ||
-          "图片生成失败，请稍后重试。";
-
-        throw new Error(errorMessage);
+      if (
+        !response.ok ||
+        !payload.payload ||
+        !payload.attempt ||
+        !payload.requestedModelFamilyId ||
+        !payload.requestedModel
+      ) {
+        throw new Error(payload.error ?? "图片生成失败，请稍后重试。");
       }
 
-      const generatedImageUrl = resultPayload.url;
-      setResult({
-        imageUrl: generatedImageUrl,
-        revisedPrompt:
-          (typeof resultPayload.revised_prompt === "string" && resultPayload.revised_prompt) ||
-          ("revised_prompt" in payload && typeof payload.revised_prompt === "string"
-            ? payload.revised_prompt
-            : undefined),
-        model: activeModelName,
+      const generatedResult = normalizeGeneratedImageResult({
+        payload: payload.payload,
+        attempt: payload.attempt,
+        createObjectUrl: URL.createObjectURL,
+        requestedModelFamilyId: payload.requestedModelFamilyId,
+        requestedModel: payload.requestedModel,
+        aspectRatioId: aspectRatio,
+        resolutionId,
       });
+      setResult(generatedResult);
 
-      if (extractSellingPoints) {
+      if (extractSellingPoints && canExtractSellingPoints) {
         setIsAnalyzing(true);
         try {
-          const translation = await analyzeSellingPoints(generatedImageUrl);
+          const translation = await analyzeSellingPoints(generatedResult.analysisImageUrl);
           setSellingPointsTranslation(translation);
         } catch {
           setSellingPointsTranslation("卖点识别失败，请手动查看图片。");
@@ -402,11 +488,11 @@ export function ListingLensApp() {
   }
 
   async function handleCopyResultUrl() {
-    if (!result?.imageUrl) {
+    if (!result?.copyableImageUrl) {
       return;
     }
 
-    await navigator.clipboard.writeText(result.imageUrl);
+    await navigator.clipboard.writeText(result.copyableImageUrl);
     setCopied(true);
 
     window.setTimeout(() => {
@@ -420,6 +506,19 @@ export function ListingLensApp() {
     }
 
     try {
+      if (result.deliveryKind === "local-data") {
+        const link = document.createElement("a");
+        const mimeType = getMimeTypeFromDataUrl(result.analysisImageUrl);
+        const extension = getExtensionFromMimeType(mimeType);
+
+        link.href = result.imageUrl;
+        link.download = `listinglens-result-${result.aspectRatioId.replace(":", "x")}.${extension}`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        return;
+      }
+
       const response = await fetch(result.imageUrl);
 
       if (!response.ok) {
@@ -432,13 +531,17 @@ export function ListingLensApp() {
       const extension = blob.type.split("/")[1] || "png";
 
       link.href = objectUrl;
-      link.download = `listinglens-result-${aspectRatio.replace(":", "x")}.${extension}`;
+      link.download = `listinglens-result-${result.aspectRatioId.replace(":", "x")}.${extension}`;
       document.body.appendChild(link);
       link.click();
       link.remove();
       URL.revokeObjectURL(objectUrl);
     } catch {
-      setFormError("当前图片源不支持直接下载，请先复制 URL 后在新标签页打开下载。");
+      setFormError(
+        result.deliveryKind === "local-data"
+          ? "当前模型结果下载失败，请重新生成后再试。"
+          : "当前图片源不支持直接下载，请先复制 URL 后在新标签页打开下载。",
+      );
     }
   }
 
@@ -507,7 +610,10 @@ export function ListingLensApp() {
               <div className="grid gap-3 sm:grid-cols-3 xl:min-w-[620px]">
                 <StatCard label="主流程" value="上传 / URL 抓图" />
                 <StatCard label="目标输出" value={`${activeAspectRatio.id} · ${activeResolution.label}`} />
-                <StatCard label="结果交付" value="复制 URL / 下载" />
+                <StatCard
+                  label="结果交付"
+                  value={activeModelFamily.id === "gpt-image-1-5" ? "本地预览 / 下载" : "复制 URL / 下载"}
+                />
               </div>
             </div>
           </div>
@@ -720,6 +826,37 @@ export function ListingLensApp() {
                 <div className="space-y-4">
                   <section className="dashboard-subpanel rounded-[1.6rem] p-4">
                     <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="sm:col-span-2">
+                        <div className="mb-2 flex items-center justify-between gap-3">
+                          <FieldHeading label="Model Family" title="模型系列" />
+                          <span className="text-xs text-slate-500">先选模型，再配置它支持的比例、分辨率和其他参数</span>
+                        </div>
+                        <div className="grid gap-2 lg:grid-cols-2">
+                          {selectableModelFamilies.map((modelFamily) => (
+                            <ModelFamilyCard
+                              key={modelFamily.id}
+                              active={modelFamily.id === modelFamilyId}
+                              title={modelFamily.label}
+                              description={modelFamily.description}
+                              priceLabel={
+                                getModelFamilyDisplayAttempt({
+                                  modelFamilyId: modelFamily.id,
+                                  resolutionId,
+                                  aspectRatioId: aspectRatio,
+                                }).priceLabel
+                              }
+                              onClick={() => handleModelFamilyChange(modelFamily.id)}
+                            />
+                          ))}
+                        </div>
+                      </div>
+
+                      {selectionNotice ? (
+                        <div className="sm:col-span-2 rounded-[1.2rem] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                          {selectionNotice}
+                        </div>
+                      ) : null}
+
                       <div>
                         <FieldHeading label="Source Language" title="源语言" />
                         <select
@@ -755,16 +892,21 @@ export function ListingLensApp() {
                       <div className="sm:col-span-2">
                         <div className="mb-2 flex items-center justify-between gap-3">
                           <FieldHeading label="Aspect Ratio" title="输出画面比例" />
-                          <span className="text-xs text-slate-500">固定输出构图方向与投放画幅</span>
+                          <span className="text-xs text-slate-500">按当前模型能力展示可用画幅</span>
                         </div>
                         <div className="grid gap-2 md:grid-cols-3">
-                          {ASPECT_RATIO_OPTIONS.map((option) => (
+                          {visibleAspectRatioOptions.map((option) => (
                             <OptionCard
                               key={option.id}
                               active={option.id === aspectRatio}
                               title={option.label}
                               description={option.description}
-                              onClick={() => setAspectRatio(option.id)}
+                              onClick={() => {
+                                setAspectRatio(option.id);
+                                setSelectionNotice("");
+                                setResolutionNotice("");
+                                setFormError("");
+                              }}
                             />
                           ))}
                         </div>
@@ -773,7 +915,7 @@ export function ListingLensApp() {
                       <div className="sm:col-span-2">
                         <div className="mb-2 flex items-center justify-between gap-3">
                           <FieldHeading label="Resolution" title="分辨率" />
-                          <p className="text-xs text-slate-500">1K 极速 2K 平衡 4K 较慢</p>
+                          <p className="text-xs text-slate-500">会按模型能力锁定或映射到对应 size / 模型版本</p>
                         </div>
                         <div className="grid gap-2 lg:grid-cols-3">
                           {RESOLUTION_OPTIONS.map((resolution) => (
@@ -782,10 +924,28 @@ export function ListingLensApp() {
                               active={resolution.id === resolutionId}
                               title={resolution.label}
                               description={resolution.description}
-                              onClick={() => setResolutionId(resolution.id)}
+                              disabled={!supportedResolutionIds.includes(resolution.id)}
+                              onClick={() => {
+                                setResolutionNotice(
+                                  getResolutionPriceChangeNotice({
+                                    modelFamilyId: activeModelFamily.id,
+                                    currentResolutionId: resolutionId,
+                                    nextResolutionId: resolution.id,
+                                    aspectRatioId: aspectRatio,
+                                  }),
+                                );
+                                setResolutionId(resolution.id);
+                                setSelectionNotice("");
+                                setFormError("");
+                              }}
                             />
                           ))}
                         </div>
+                        {resolutionNotice ? (
+                          <div className="mt-2 rounded-[1rem] border border-orange-200 bg-[linear-gradient(180deg,rgba(255,242,235,0.92),rgba(255,250,246,0.96))] px-3 py-2 text-xs leading-5 text-[color:var(--accent-strong)]">
+                            {resolutionNotice}
+                          </div>
+                        ) : null}
                       </div>
 
                       <div className="sm:col-span-2">
@@ -807,9 +967,10 @@ export function ListingLensApp() {
                         </div>
                         <button
                           type="button"
+                          disabled={!canExtractSellingPoints}
                           onClick={() => setExtractSellingPoints(!extractSellingPoints)}
                           className={cx(
-                            "mt-3 w-full rounded-[1.2rem] border px-4 py-3 text-left transition",
+                            "mt-3 w-full rounded-[1.2rem] border px-4 py-3 text-left transition disabled:cursor-not-allowed disabled:opacity-60",
                             extractSellingPoints
                               ? "border-[color:var(--border-strong)] bg-[linear-gradient(180deg,rgba(255,241,233,0.98),rgba(255,249,245,1))] ring-2 ring-[color:var(--accent-ring)]"
                               : "border-slate-200 bg-white hover:border-[color:var(--border-strong)] hover:bg-white",
@@ -824,15 +985,19 @@ export function ListingLensApp() {
                             </span>
                             <div className="min-w-0 flex-1">
                               <p className="font-heading text-sm font-bold text-slate-950">提炼图片卖点</p>
-                              <p className="mt-0.5 text-xs leading-5 text-slate-500">叠加设计感目标语言卖点文字，生成后提供中文对照</p>
+                              <p className="mt-0.5 text-xs leading-5 text-slate-500">
+                                {canExtractSellingPoints
+                                  ? "叠加设计感目标语言卖点文字，生成后提供中文对照"
+                                  : "当前模型返回 base64 本地图片，不支持卖点提炼"}
+                              </p>
                             </div>
                             <span className={cx(
                               "flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition",
-                              extractSellingPoints
+                              extractSellingPoints && canExtractSellingPoints
                                 ? "border-[color:var(--accent)] bg-[color:var(--accent)] text-white"
                                 : "border-slate-300 bg-white",
                             )}>
-                              {extractSellingPoints && (
+                              {extractSellingPoints && canExtractSellingPoints && (
                                 <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
                                   <path d="M1 4l2.5 2.5L9 1" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
                                 </svg>
@@ -853,25 +1018,6 @@ export function ListingLensApp() {
                         />
                       </div>
 
-                      <div className="sm:col-span-2">
-                        <div className="mb-2 flex items-center justify-between gap-3">
-                          <FieldHeading label="Model Family" title="模型系列" />
-                          <span className="text-xs text-slate-500">分辨率会自动映射到对应模型版本</span>
-                        </div>
-                        <div className="grid gap-2 lg:grid-cols-2">
-                          {MODEL_FAMILY_OPTIONS.map((modelFamily) => (
-                            <ModelFamilyCard
-                              key={modelFamily.id}
-                              active={modelFamily.id === modelFamilyId}
-                              title={modelFamily.label}
-                              description={modelFamily.description}
-                              priceLabel={modelFamily.priceLabel}
-                              onClick={() => setModelFamilyId(modelFamily.id)}
-                            />
-                          ))}
-                        </div>
-                      </div>
-
                       <div className="sm:col-span-2 rounded-[1.35rem] border border-orange-200 bg-[linear-gradient(180deg,rgba(255,242,235,0.95),rgba(255,250,246,0.98))] px-4 py-4 text-sm leading-6 text-slate-700">
                         <div className="flex items-start gap-3">
                           <span className="dashboard-icon-chip mt-0.5 h-10 w-10 rounded-[0.9rem] bg-white text-[color:var(--accent)]">
@@ -886,6 +1032,13 @@ export function ListingLensApp() {
                                 : "若检测到图中已有文字，会自动翻译成目标语言；若没有文字，则只做主图美化。"}
                             </p>
                             <p className="mt-2">输出画面会尽量按 {activeAspectRatio.label} 生成。</p>
+                            <p className="mt-2 text-xs leading-6 text-slate-500">
+                              当前主模型 {activeModelName}
+                              {primaryAttempt.size ? `，输出 size ${primaryAttempt.size}` : ""}。
+                              {activeModelFamily.id === "nano-banana-pro"
+                                ? " Nano Banana Pro 失败后会自动切换 Gemini 3 Pro Preview。"
+                                : ""}
+                            </p>
                             <p className="mt-2 text-xs leading-6 text-slate-500">
                               如果商品站点禁止浏览器直接读取候选图，URL 抓图后可能无法直接生成，此时请把主图下载后改用本地上传。
                             </p>
@@ -908,8 +1061,10 @@ export function ListingLensApp() {
                         {activeModelFamily.label} · {activeResolution.label}
                       </p>
                       <p className="truncate text-sm leading-6 text-slate-500">
-                        当前模型 {activeModelName}，输出比例 {activeAspectRatio.id}，单次成本{" "}
-                        {activeModelFamily.priceLabel}。
+                        当前模型 {activeModelName}
+                        {primaryAttempt.size ? `（size ${primaryAttempt.size}）` : ""}
+                        ，输出比例 {activeAspectRatio.id}，单次成本{" "}
+                        {primaryAttempt.priceLabel}。
                       </p>
                     </div>
 
@@ -932,20 +1087,21 @@ export function ListingLensApp() {
                 icon={<PreviewPanelIcon />}
                 label="Preview & Result"
                 title="预览与结果"
-                subtitle="左看输入图，右看生成图，结果 URL 支持复制与下载。"
+                subtitle="左看输入图，右看生成图；部分模型提供 URL，部分模型仅支持本地预览与下载。"
                 step="Step 3"
               />
 
               <div className={PANEL_SCROLL_AREA_CLASS}>
                 <div className="space-y-4">
                   <div className="flex flex-wrap items-center gap-2">
-                    <InlineStatusChip label="输出比例" value={activeAspectRatio.id} />
-                    <InlineStatusChip label="分辨率" value={activeResolution.label} />
-                    <InlineStatusChip label="模型" value={activeModelFamily.label} />
+                    <InlineStatusChip label="输出比例" value={resultAspectRatio.id} />
+                    <InlineStatusChip label="分辨率" value={resultResolution.label} />
+                    <InlineStatusChip label="模型" value={resultModelLabel} />
                   </div>
 
                   <div className="grid gap-4 xl:grid-cols-2">
                     <PreviewCard
+                      key={sourcePreview || "source-empty"}
                       eyebrow="Original Input"
                       title="原始主图"
                       subtitle={uploadMode === "file" ? "本地上传" : "URL 候选图"}
@@ -957,11 +1113,12 @@ export function ListingLensApp() {
                     />
 
                     <PreviewCard
+                      key={result?.imageUrl || "result-empty"}
                       eyebrow="AI Intelligence Layer"
                       title="生成结果"
                       subtitle={result ? "AI 输出" : "等待生成"}
                       imageUrl={result?.imageUrl ?? ""}
-                      aspectRatio={activeAspectRatio.aspectRatio}
+                      aspectRatio={resultAspectRatio.aspectRatio}
                       emptyState="完成配置后点击“生成优化图片”，这里会展示最终结果。"
                       badge={result?.imageUrl ? "Processed 100%" : "Waiting"}
                       accent
@@ -970,12 +1127,22 @@ export function ListingLensApp() {
                   </div>
 
                   <div className="dashboard-subpanel rounded-[1.6rem] p-4">
+                    {result?.usedFallback ? (
+                      <div className="mb-4 rounded-[1.2rem] border border-orange-200 bg-[linear-gradient(180deg,rgba(255,242,235,0.95),rgba(255,250,246,0.98))] px-4 py-3 text-sm leading-6 text-slate-700">
+                        已自动回退：{requestedResultModelFamily.label} → {result.actualModelLabel}
+                      </div>
+                    ) : null}
+
                     <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
                       <div className="min-w-0">
                         <p className={FIELD_LABEL_CLASS}>Result Delivery</p>
-                        <p className="font-heading text-lg font-bold text-slate-950">生成图 URL</p>
+                        <p className="font-heading text-lg font-bold text-slate-950">
+                          {result?.deliveryKind === "local-data" || (!result && activeModelFamily.id === "gpt-image-1-5")
+                            ? "生成结果（本地预览）"
+                            : "生成图 URL"}
+                        </p>
                         <p className="truncate text-xs leading-6 text-slate-500">
-                          支持直接复制，可用于回填运营流程、人工复核或跳转原图下载。
+                          {resultDeliveryDescription}
                         </p>
                       </div>
 
@@ -983,7 +1150,7 @@ export function ListingLensApp() {
                         <button
                           type="button"
                           onClick={handleCopyResultUrl}
-                          disabled={!result?.imageUrl}
+                          disabled={!result?.copyableImageUrl}
                           className="dashboard-secondary-button rounded-full px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-45"
                         >
                           {copied ? "已复制" : "复制 URL"}
@@ -1000,7 +1167,10 @@ export function ListingLensApp() {
                     </div>
 
                     <div className="dashboard-url-bar mt-3 px-4 py-3 text-xs leading-6">
-                      {result?.imageUrl || "生成完成后，这里会展示服务商返回的图片 URL。"}
+                      {result?.copyableImageUrl ||
+                        (result?.deliveryKind === "local-data"
+                          ? "当前模型返回本地预览数据，仅支持下载图片。"
+                          : "生成完成后，这里会展示服务商返回的图片 URL。")}
                     </div>
 
                     {extractSellingPoints && (isAnalyzing || sellingPointsTranslation) ? (
@@ -1152,7 +1322,7 @@ export function ListingLensApp() {
                   title="生成结果"
                   subtitle={result ? "AI 输出" : "等待生成"}
                   imageUrl={result?.imageUrl ?? ""}
-                  aspectRatio={activeAspectRatio.aspectRatio}
+                  aspectRatio={resultAspectRatio.aspectRatio}
                   emptyState="当前还没有生成结果图。"
                 />
               </div>
@@ -1269,27 +1439,95 @@ function OptionCard({
   active,
   title,
   description,
+  disabled = false,
   onClick,
 }: {
   active: boolean;
   title: string;
   description: string;
+  disabled?: boolean;
   onClick: () => void;
 }) {
   return (
     <button
       type="button"
+      disabled={disabled}
       onClick={onClick}
       className={cx(
-        "dashboard-subpanel rounded-[1.2rem] px-3 py-3 text-left transition",
+        "dashboard-subpanel flex flex-col justify-start rounded-[1rem] px-3 py-2.25 text-left transition disabled:cursor-not-allowed",
+        disabled && "border-slate-200/70 bg-slate-50 text-slate-400 opacity-55",
         active
           ? "border-[color:var(--border-strong)] bg-[linear-gradient(180deg,rgba(255,241,233,0.98),rgba(255,249,245,1))] ring-2 ring-[color:var(--accent-ring)]"
           : "hover:border-[color:var(--border-strong)] hover:bg-white",
       )}
     >
-      <p className="font-heading text-base font-bold text-slate-950">{title}</p>
-      <p className="mt-1.5 text-xs leading-5 text-slate-500">{description}</p>
+      <div className="flex min-h-[1.5rem] items-start">
+        <p
+          className={cx(
+            "overflow-hidden text-ellipsis whitespace-nowrap font-heading text-[0.92rem] font-bold leading-[1.05] sm:text-[0.98rem]",
+            disabled ? "text-slate-400" : "text-slate-950",
+          )}
+          title={title}
+        >
+          {title}
+        </p>
+      </div>
+      <p
+        className={cx(
+          "mt-0.75 overflow-hidden text-[10.5px] leading-[1.45] sm:text-[11px]",
+          disabled ? "text-slate-400" : "text-slate-500",
+        )}
+        style={{
+          display: "-webkit-box",
+          WebkitBoxOrient: "vertical",
+          WebkitLineClamp: 2,
+        }}
+        title={description}
+      >
+        {description}
+      </p>
     </button>
+  );
+}
+
+function ModelCardTitle({
+  title,
+  active,
+}: {
+  title: string;
+  active: boolean;
+}) {
+  const shouldScroll = title.length >= 14;
+
+  return (
+    <div className={cx("dashboard-marquee", shouldScroll && "dashboard-marquee--ready")}>
+      <span
+        className={cx(
+          "dashboard-marquee-track",
+        )}
+        aria-label={title}
+      >
+        <span
+          className={cx(
+            "dashboard-marquee-text font-heading text-base font-bold leading-7 sm:text-[1.35rem] sm:leading-[1.2]",
+            active ? "text-white" : "text-slate-950",
+          )}
+        >
+          {title}
+        </span>
+        {shouldScroll ? (
+          <span
+            aria-hidden
+            className={cx(
+              "dashboard-marquee-text font-heading text-base font-bold leading-7 sm:text-[1.35rem] sm:leading-[1.2]",
+              active ? "text-white" : "text-slate-950",
+            )}
+          >
+            {title}
+          </span>
+        ) : null}
+      </span>
+    </div>
   );
 }
 
@@ -1359,22 +1597,30 @@ function ModelFamilyCard({
       type="button"
       onClick={onClick}
       className={cx(
-        "rounded-[1.35rem] border px-4 py-4 text-left transition",
+        "dashboard-model-card rounded-[1.2rem] border px-3 py-3 text-left transition",
         active
-          ? "border-slate-900 bg-[linear-gradient(180deg,#23272f,#12151b)] text-white shadow-[0_22px_40px_rgba(15,23,42,0.18)]"
+          ? "border-slate-900 bg-[linear-gradient(180deg,#23272f,#12151b)] text-white shadow-[0_16px_28px_rgba(15,23,42,0.14)]"
           : "dashboard-subpanel hover:border-slate-300 hover:bg-white",
       )}
     >
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex items-start justify-between gap-2.5">
         <div className="min-w-0">
-          <p className="font-heading text-lg font-bold">{title}</p>
-          <p className={cx("mt-2 text-xs leading-6", active ? "text-slate-200" : "text-slate-500")}>
+          <ModelCardTitle title={title} active={active} />
+          <p
+            className={cx("mt-1.5 overflow-hidden text-xs leading-5", active ? "text-slate-200" : "text-slate-500")}
+            style={{
+              display: "-webkit-box",
+              WebkitBoxOrient: "vertical",
+              WebkitLineClamp: 2,
+            }}
+            title={description}
+          >
             {description}
           </p>
         </div>
         <span
           className={cx(
-            "rounded-full px-3 py-1 text-xs font-semibold whitespace-nowrap",
+            "rounded-full px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap",
             active ? "bg-white/10 text-white" : "bg-[var(--accent-soft)] text-[color:var(--accent)]",
           )}
         >
@@ -1414,11 +1660,12 @@ function PreviewCard({
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    setAttempt(0);
-    setRetrying(false);
-    setFailed(false);
-    return () => { if (retryTimerRef.current) clearTimeout(retryTimerRef.current); };
-  }, [imageUrl]);
+    return () => {
+      if (retryTimerRef.current) {
+        clearTimeout(retryTimerRef.current);
+      }
+    };
+  }, []);
 
   function handleImgError() {
     if (attempt < RETRY_DELAYS.length) {

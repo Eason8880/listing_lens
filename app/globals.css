@@ -156,6 +156,53 @@ h4,
     box-shadow: var(--shadow-soft);
   }
 
+  .dashboard-marquee {
+    width: 100%;
+    overflow: hidden;
+  }
+
+  .dashboard-marquee-track {
+    display: inline-flex;
+    width: max-content;
+    max-width: none;
+    align-items: center;
+    white-space: nowrap;
+    will-change: transform;
+  }
+
+  .dashboard-marquee-text {
+    display: block;
+    flex: none;
+    white-space: nowrap;
+  }
+
+  .dashboard-marquee--ready .dashboard-marquee-track {
+    gap: 1rem;
+  }
+
+  .dashboard-marquee--ready {
+    mask-image: linear-gradient(90deg, transparent 0, #000 0.6rem, #000 calc(100% - 0.6rem), transparent 100%);
+  }
+
+  @keyframes dashboard-marquee-scroll {
+    0%,
+    12% {
+      transform: translateX(0);
+    }
+
+    88%,
+    100% {
+      transform: translateX(calc(-50% - 0.5rem));
+    }
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .dashboard-model-card:hover .dashboard-marquee--ready .dashboard-marquee-track,
+    .dashboard-model-card:focus-visible .dashboard-marquee--ready .dashboard-marquee-track {
+      animation: dashboard-marquee-scroll 6.8s linear infinite;
+    }
+  }
+
   .dashboard-primary-button {
     border-radius: 1rem;
     background: linear-gradient(135deg, var(--accent) 0%, var(--accent-strong) 100%);
