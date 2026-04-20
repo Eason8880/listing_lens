@@ -1035,9 +1035,6 @@ export function ListingLensApp() {
                             <p className="mt-2 text-xs leading-6 text-slate-500">
                               当前主模型 {activeModelName}
                               {primaryAttempt.size ? `，输出 size ${primaryAttempt.size}` : ""}。
-                              {activeModelFamily.id === "nano-banana-pro"
-                                ? " Nano Banana Pro 失败后会自动切换 Gemini 3 Pro Preview。"
-                                : ""}
                             </p>
                             <p className="mt-2 text-xs leading-6 text-slate-500">
                               如果商品站点禁止浏览器直接读取候选图，URL 抓图后可能无法直接生成，此时请把主图下载后改用本地上传。

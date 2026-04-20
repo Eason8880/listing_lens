@@ -39,9 +39,8 @@ export const MODEL_FAMILY_OPTIONS: ModelFamilyOption[] = [
     label: "Nano Banana Pro",
     priceLabel: "0.2 元/张",
     description: "高阶版本，适合需要更强视觉变化与重绘时使用。",
-    baseModel: "nano-banana-2",
+    baseModel: "nano-banana-pro",
     requestStrategy: "edits-model-name",
-    fallbackModelFamilyIds: ["gemini-pro-preview"],
   },
   {
     id: "doubao-seedream",

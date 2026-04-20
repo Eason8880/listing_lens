@@ -30,7 +30,7 @@ test("all model family price labels use 元/张 wording", async () => {
   }
 });
 
-test("buildGenerationAttempts creates a Nano Banana Pro fallback chain per resolution", async () => {
+test("buildGenerationAttempts keeps Nano Banana Pro on its primary model without fallback", async () => {
   const { buildGenerationAttempts } = await requireImageGenerationModule();
 
   const attempts = buildGenerationAttempts({
@@ -50,14 +50,7 @@ test("buildGenerationAttempts creates a Nano Banana Pro fallback chain per resol
     [
       {
         familyId: "nano-banana-pro",
-        model: "nano-banana-2-4k",
-        requestStrategy: "edits-model-name",
-        endpoint: "/v1/images/edits",
-        responseFormat: "url",
-      },
-      {
-        familyId: "gemini-pro-preview",
-        model: "gemini-3-pro-image-preview-4k",
+        model: "nano-banana-pro-4k",
         requestStrategy: "edits-model-name",
         endpoint: "/v1/images/edits",
         responseFormat: "url",
