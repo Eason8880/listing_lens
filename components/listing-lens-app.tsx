@@ -6,7 +6,6 @@ import {
   useRef,
   useState,
   type ChangeEvent,
-  type ReactNode,
 } from "react";
 
 import {
@@ -38,7 +37,9 @@ import {
   type GenerationAttempt,
   type ImageApiPayload,
 } from "@/lib/image-generation";
+import { getModelFamilySelectionNotice } from "@/lib/model-family-notice";
 import { buildGenerationPrompt } from "@/lib/prompt";
+import { parseSellingPoints } from "@/lib/selling-points";
 import type {
   AspectRatioId,
   ExtractedImageCandidate,
@@ -46,6 +47,7 @@ import type {
   ModelFamilyId,
   PromptPresetId,
   ResolutionId,
+  SellingPointItem,
 } from "@/lib/types";
 
 type UploadMode = "file" | "url";
@@ -59,13 +61,13 @@ type GenerateImageApiResponse = {
 };
 
 const INPUT_BASE_CLASS =
-  "w-full rounded-2xl border border-slate-200/80 bg-[var(--panel-soft)] px-4 py-3 text-sm text-slate-900 shadow-[inset_0_1px_0_rgba(255,255,255,0.95)] outline-none transition placeholder:text-slate-400 focus:border-[color:var(--accent)] focus:bg-white focus:ring-4 focus:ring-[color:var(--accent-ring)]";
+  "w-full rounded-md border border-[var(--border)] bg-[var(--panel-soft)] px-3 py-2 text-sm text-[var(--ink)] outline-none transition placeholder:text-[var(--muted)] focus:border-[color:var(--accent)] focus:bg-white focus:ring-2 focus:ring-[color:var(--accent-ring)]";
 const FIELD_LABEL_CLASS =
-  "mb-2 block text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500";
-const PANEL_HEADER_CLASS = "dashboard-panel-header flex items-start justify-between gap-4 px-4 py-4";
+  "mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.2em] text-[var(--ink3)]";
+const PANEL_HEADER_CLASS =
+  "dashboard-panel-header flex items-center justify-between gap-4 px-4 py-3";
 const PANEL_SCROLL_AREA_CLASS =
-  "scrollbar-soft scrollbar-soft-desktop min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-4 pb-4 sm:px-5 sm:pb-5";
-const STEP_BADGE_CLASS = "dashboard-step-badge";
+  "scrollbar-soft scrollbar-soft-desktop min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-4 pt-[5px] pb-4";
 
 function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
@@ -73,6 +75,25 @@ function cx(...classes: Array<string | false | null | undefined>) {
 
 function buildProxyImageUrl(imageUrl: string) {
   return imageUrl ? `/api/image-proxy?url=${encodeURIComponent(imageUrl)}` : "";
+}
+
+async function fetchImageAsDataUrl(imageUrl: string): Promise<string | null> {
+  if (!imageUrl || imageUrl.startsWith("data:") || imageUrl.startsWith("blob:")) {
+    return imageUrl || null;
+  }
+  try {
+    const response = await fetch(buildProxyImageUrl(imageUrl));
+    if (!response.ok) return null;
+    const blob = await response.blob();
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return null;
+  }
 }
 
 function getMimeTypeFromDataUrl(dataUrl: string) {
@@ -117,8 +138,12 @@ export function ListingLensApp() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [isComparisonOpen, setIsComparisonOpen] = useState(false);
   const [extractSellingPoints, setExtractSellingPoints] = useState(false);
-  const [sellingPointsTranslation, setSellingPointsTranslation] = useState<string | null>(null);
+  const [adjustProductAngle, setAdjustProductAngle] = useState(false);
+  const [matchBackgroundToProductInfo, setMatchBackgroundToProductInfo] = useState(false);
+  const [sellingPointsResult, setSellingPointsResult] = useState<SellingPointItem[] | null>(null);
+  const [sellingPointsError, setSellingPointsError] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [copiedSellingPoints, setCopiedSellingPoints] = useState(false);
 
   useEffect(() => {
     const storedApiKey = window.localStorage.getItem(API_KEY_STORAGE_KEY);
@@ -174,7 +199,22 @@ export function ListingLensApp() {
     };
   }, [isSettingsOpen, isComparisonOpen]);
 
-  const activePreset = PROMPT_PRESETS.find((preset) => preset.id === presetId) ?? PROMPT_PRESETS[1];
+  const handleGenerateRef = useRef<() => void>(() => {});
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      const isShortcut = (event.metaKey || event.ctrlKey) && event.key === "Enter";
+      if (!isShortcut) {
+        return;
+      }
+      event.preventDefault();
+      handleGenerateRef.current();
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
   const activeModelFamily =
     MODEL_FAMILY_OPTIONS.find((item) => item.id === modelFamilyId) ?? MODEL_FAMILY_OPTIONS[0];
   const selectableModelFamilies = MODEL_FAMILY_OPTIONS.filter((item) => item.selectable !== false);
@@ -192,7 +232,6 @@ export function ListingLensApp() {
     resolutionId,
     aspectRatioId: aspectRatio,
   })[0];
-  const activeModelName = primaryAttempt.model;
   const sourcePreview =
     uploadMode === "file" ? filePreviewUrl : buildProxyImageUrl(selectedImageUrl);
   const resultAspectRatio =
@@ -203,10 +242,6 @@ export function ListingLensApp() {
     MODEL_FAMILY_OPTIONS.find((item) => item.id === result?.requestedModelFamilyId) ??
     activeModelFamily;
   const resultModelLabel = result?.actualModelLabel ?? activeModelFamily.label;
-  const resultDeliveryDescription =
-    result?.deliveryKind === "local-data" || (!result && activeModelFamily.id === "gpt-image-1-5")
-      ? "该模型结果仅支持当前浏览器内预览与下载，不提供外链 URL。"
-      : "支持直接复制，可用于回填运营流程、人工复核或跳转原图下载。";
   const canExtractSellingPoints = supportsSellingPointExtraction({
     modelFamilyId: activeModelFamily.id,
     resolutionId,
@@ -217,6 +252,14 @@ export function ListingLensApp() {
     targetLanguage.trim().length > 0 &&
     ((uploadMode === "file" && Boolean(selectedFile)) ||
       (uploadMode === "url" && Boolean(selectedImageUrl)));
+  const sellingPointsFromResponse = result?.sellingPoints ?? sellingPointsResult;
+  const isSellingPointsEmptyState =
+    sellingPointsFromResponse !== undefined &&
+    sellingPointsFromResponse !== null &&
+    sellingPointsFromResponse.length === 0;
+  const showSellingPointsPanel =
+    extractSellingPoints && Boolean(result?.imageUrl);
+  const costSummary = `预估 ${primaryAttempt.priceLabel} · ${activeResolution.label} · ${activeAspectRatio.id}`;
 
   function handleModelFamilyChange(nextModelFamilyId: ModelFamilyId) {
     const nextSelection = coerceGenerationSelection({
@@ -229,7 +272,7 @@ export function ListingLensApp() {
       resolutionId: nextSelection.resolutionId,
       aspectRatioId: nextSelection.aspectRatioId,
     });
-    const notices = [nextSelection.message];
+    const notices = [nextSelection.message, getModelFamilySelectionNotice(nextModelFamilyId)];
 
     if (!nextCanExtractSellingPoints && extractSellingPoints) {
       notices.push("当前模型返回本地预览图片，不支持提炼图片卖点，已自动关闭该功能。");
@@ -242,7 +285,8 @@ export function ListingLensApp() {
     setResolutionNotice("");
     if (!nextCanExtractSellingPoints && extractSellingPoints) {
       setExtractSellingPoints(false);
-      setSellingPointsTranslation(null);
+      setSellingPointsResult(null);
+      setSellingPointsError(null);
     }
     setFormError("");
   }
@@ -352,6 +396,8 @@ export function ListingLensApp() {
   ];
 
   async function analyzeSellingPoints(imageUrl: string): Promise<string> {
+    const analysisUrl = await fetchImageAsDataUrl(imageUrl) ?? imageUrl;
+
     for (const model of VISION_MODELS) {
       try {
         const response = await fetch(`${API_BASE_URL}/v1/chat/completions`, {
@@ -367,15 +413,15 @@ export function ListingLensApp() {
               {
                 role: "user",
                 content: [
-                  { type: "image_url", image_url: { url: imageUrl } },
+                  { type: "image_url", image_url: { url: analysisUrl } },
                   {
                     type: "text",
-                    text: `请识别图片中所有卖点文字（短语或关键词），以"原文 → 中文翻译"的格式逐行列出。如果图中没有文字，回复"未检测到卖点文字"。只列出文字内容，不需要其他解释。`,
+                    text: `请识别图片中所有可见的卖点文字（短语或关键词）。严格按以下格式输出，每行一个条目，不允许合并、跳过或添加任何其他内容：\n原文文字 → 中文翻译\n原文文字 → 中文翻译\n每行必须单独占一行，使用 → 分隔。如果图中没有任何文字，只回复"未检测到卖点文字"。`,
                   },
                 ],
               },
             ],
-            max_tokens: 500,
+            max_tokens: 1000,
           }),
         });
 
@@ -419,7 +465,8 @@ export function ListingLensApp() {
     setIsGenerating(true);
     setFormError("");
     setCopied(false);
-    setSellingPointsTranslation(null);
+    setSellingPointsResult(null);
+    setSellingPointsError(null);
 
     try {
       const sourceFile = await resolveSourceFile();
@@ -430,6 +477,8 @@ export function ListingLensApp() {
         presetId,
         customPrompt: customPrompt.trim() || undefined,
         extractSellingPoints,
+        adjustProductAngle,
+        matchBackgroundToProductInfo,
       });
       const body = new FormData();
       body.append("prompt", prompt);
@@ -473,9 +522,11 @@ export function ListingLensApp() {
         setIsAnalyzing(true);
         try {
           const translation = await analyzeSellingPoints(generatedResult.analysisImageUrl);
-          setSellingPointsTranslation(translation);
+          const parsed = parseSellingPoints(translation);
+          setSellingPointsResult(parsed);
         } catch {
-          setSellingPointsTranslation("卖点识别失败，请手动查看图片。");
+          setSellingPointsResult([]);
+          setSellingPointsError("卖点识别失败，请手动查看图片。");
         } finally {
           setIsAnalyzing(false);
         }
@@ -485,6 +536,25 @@ export function ListingLensApp() {
     } finally {
       setIsGenerating(false);
     }
+  }
+
+  handleGenerateRef.current = () => {
+    if (!canGenerate || isGenerating) {
+      return;
+    }
+    void handleGenerate();
+  };
+
+  async function handleCopySellingPoints() {
+    if (!sellingPointsFromResponse?.length) {
+      return;
+    }
+    const text = sellingPointsFromResponse
+      .map((item) => `${item.target} — ${item.zh}`)
+      .join("\n");
+    await navigator.clipboard.writeText(text);
+    setCopiedSellingPoints(true);
+    window.setTimeout(() => setCopiedSellingPoints(false), 1500);
   }
 
   async function handleCopyResultUrl() {
@@ -563,113 +633,72 @@ export function ListingLensApp() {
   }
 
   return (
-    <main className="relative min-h-screen overflow-hidden px-4 py-4 text-slate-950 sm:px-5 lg:px-6">
-      <div className="pointer-events-none absolute inset-0">
-        <div className="absolute left-[-7rem] top-4 h-56 w-56 rounded-full bg-orange-200/45 blur-3xl" />
-        <div className="absolute right-[-4rem] top-20 h-72 w-72 rounded-full bg-sky-200/40 blur-3xl" />
-        <div className="absolute bottom-[-7rem] left-1/3 h-64 w-64 rounded-full bg-amber-200/35 blur-3xl" />
-      </div>
-
-      <div className="relative mx-auto flex max-w-[1780px] flex-col gap-4">
-        <section className="dashboard-hero-panel rounded-[2rem] px-5 py-5 sm:px-6">
-          <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
-            <div className="min-w-0 max-w-4xl">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="inline-flex w-fit items-center rounded-full border border-orange-200 bg-[var(--accent-soft)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-[color:var(--accent)]">
-                  Cross-border Imaging Studio
-                </span>
-                <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/85 px-3 py-1 text-xs font-medium text-slate-500 shadow-[0_8px_22px_rgba(15,23,42,0.04)]">
-                  <span className="h-2 w-2 rounded-full bg-cyan-500" />
-                  Ready for market localization
-                </span>
-              </div>
-
-              <div className="mt-4 space-y-2">
-                <h1 className="dashboard-brand text-4xl font-extrabold tracking-tight text-slate-950 sm:text-[3.2rem] sm:leading-[1.02]">
-                  {APP_NAME}
-                </h1>
-                <p className="max-w-3xl text-[15px] leading-7 text-slate-600">
-                  把商品主图的文字本地化、画幅适配和电商视觉美化收进一个工作台。粘贴商品图片链接或上传图片，
-                  配置目标语言与输出比例，几步生成适合目标市场的主图，结果支持一键复制 URL 或下载图片。
-                </p>
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-4 xl:min-w-[620px] xl:items-end">
-              <button
-                type="button"
-                onClick={() => setIsSettingsOpen(true)}
-                className="dashboard-secondary-button inline-flex min-h-11 items-center gap-2 px-4 py-2 text-sm font-semibold text-[color:var(--accent)]"
-                aria-label="输入或获取 API Key"
-                title="输入或获取 API Key"
-              >
-                <GearIcon />
-                <span>{apiKey.trim() ? "已保存 API Key" : "输入或获取 API Key"}</span>
-              </button>
-
-              <div className="grid gap-3 sm:grid-cols-3 xl:min-w-[620px]">
-                <StatCard label="主流程" value="上传 / URL 抓图" />
-                <StatCard label="目标输出" value={`${activeAspectRatio.id} · ${activeResolution.label}`} />
-                <StatCard
-                  label="结果交付"
-                  value={activeModelFamily.id === "gpt-image-1-5" ? "本地预览 / 下载" : "复制 URL / 下载"}
-                />
-              </div>
-            </div>
+    <main className="flex h-screen flex-col overflow-hidden bg-[var(--background)] text-[var(--ink)]">
+      {/* Compact top bar */}
+      <header className="flex h-12 shrink-0 items-center justify-between border-b border-[var(--border)] bg-[var(--panel)] px-4">
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-6 w-6 items-center justify-center rounded bg-slate-900">
+            <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" className="h-3.5 w-3.5">
+              <circle cx="11" cy="11" r="6" />
+              <path strokeLinecap="round" d="M19 19l-3.5-3.5" />
+            </svg>
           </div>
-        </section>
+          <span className="font-serif text-[18px] tracking-[-0.3px] text-[var(--ink)]">{APP_NAME}</span>
+          <span className="ml-0.5 text-[11px] text-[var(--ink3)]">跨境电商商品图片优化/本地化工作台</span>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="flex items-center gap-1.5 text-[11px] text-[var(--ink3)]">
+            <span
+              className={cx(
+                "h-1.5 w-1.5 rounded-full",
+                apiKey.trim() ? "bg-[color:var(--accent)]" : "bg-[var(--muted)]",
+              )}
+            />
+            {apiKey.trim() ? "API Key 已保存" : "未设置 API Key"}
+          </span>
+          <button
+            type="button"
+            onClick={() => setIsSettingsOpen(true)}
+            className="dashboard-secondary-button flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium"
+            aria-label="API Key 设置"
+          >
+            <GearIcon />
+            设置
+          </button>
+        </div>
+      </header>
 
-        <div className="overflow-x-auto pb-1">
-          <section className="grid h-[calc(100vh-13rem)] min-w-[1440px] gap-4 grid-cols-[minmax(320px,0.72fr)_minmax(470px,1fr)_minmax(540px,1.12fr)]">
-            <section className="dashboard-panel flex min-h-0 flex-col overflow-hidden rounded-[2rem]">
-              <PanelHeader
-                icon={<SourceIcon />}
-                label="Media Source"
-                title="图片来源"
-                subtitle="选择主图来源，再准备输入素材。"
-                step="Step 1"
-              />
+      {/* 3-column workbench */}
+      <div className="flex min-h-0 flex-1 gap-2.5 p-2.5">
+          <section className="grid min-h-0 flex-1 gap-2.5 grid-cols-[minmax(280px,0.7fr)_minmax(380px,1fr)_minmax(440px,1.1fr)]">
+            {/* ── Step 1: Source ── */}
+            <section className="dashboard-panel flex min-h-0 flex-col overflow-hidden rounded-lg">
+              <PanelHeader title="图片来源" step="Step 1" />
 
               <div className={PANEL_SCROLL_AREA_CLASS}>
-                <div className="space-y-4">
-                  <div className="dashboard-subpanel rounded-[1.6rem] p-3">
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <ModeCard
-                        title="本地上传"
-                        description="适合已经拿到原始主图时快速进入生成。"
-                        active={uploadMode === "file"}
-                        icon={<UploadModeIcon />}
-                        onClick={() => setUploadMode("file")}
-                      />
-                      <ModeCard
-                        title="商品图片 URL"
-                        description="适合从商品图片 URL 链接直接提取图片。"
-                        active={uploadMode === "url"}
-                        icon={<LinkModeIcon />}
-                        onClick={() => setUploadMode("url")}
-                      />
-                    </div>
+                <div className="space-y-3">
+                  {/* Segmented mode control */}
+                  <div className="grid grid-cols-2 gap-0.5 rounded-md border border-[var(--border)] bg-[var(--panel-soft)] p-0.5">
+                    {(["file", "url"] as const).map((mode) => (
+                      <button
+                        key={mode}
+                        type="button"
+                        onClick={() => setUploadMode(mode)}
+                        className={cx(
+                          "flex items-center justify-center gap-1.5 rounded py-1.5 text-xs font-medium transition",
+                          uploadMode === mode
+                            ? "bg-[var(--panel)] text-[var(--ink)] shadow-sm"
+                            : "text-[var(--ink3)] hover:text-[var(--ink2)]",
+                        )}
+                      >
+                        {mode === "file" ? <UploadModeIcon /> : <LinkModeIcon />}
+                        {mode === "file" ? "本地上传" : "URL 抓图"}
+                      </button>
+                    ))}
                   </div>
 
                   {uploadMode === "file" ? (
-                    <section className="dashboard-subpanel rounded-[1.6rem] p-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <FieldHeading label="Local Upload" title="本地上传" />
-                          <h3 className="font-heading text-lg font-bold text-slate-950">上传商品主图</h3>
-                          <p className="mt-1 text-xs leading-5 text-slate-500">
-                            支持 JPG、PNG、WEBP、AVIF，建议使用 2000px 以上原图。
-                          </p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => fileInputRef.current?.click()}
-                          className="dashboard-primary-button min-w-[7.5rem] whitespace-nowrap px-4 py-2 text-sm font-semibold"
-                        >
-                          选择文件
-                        </button>
-                      </div>
-
+                    <>
                       <input
                         ref={fileInputRef}
                         type="file"
@@ -677,533 +706,609 @@ export function ListingLensApp() {
                         className="hidden"
                         onChange={handleFileChange}
                       />
-
                       <button
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
-                        className="mt-4 flex w-full flex-col items-center justify-center rounded-[1.5rem] border border-dashed border-orange-200 bg-[linear-gradient(180deg,rgba(255,245,239,0.95),rgba(255,251,248,0.98))] px-5 py-8 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] transition hover:border-orange-300 hover:bg-[linear-gradient(180deg,rgba(255,241,232,0.98),rgba(255,252,248,1))]"
+                        className={cx(
+                          "flex w-full items-center gap-3 rounded-md border px-3 py-2.5 text-left transition",
+                          selectedFile
+                            ? "border-[var(--border)] bg-[var(--panel)] hover:border-[color:var(--accent)]"
+                            : "border-dashed border-[var(--border)] bg-[var(--panel-soft)] hover:border-[color:var(--accent)] hover:bg-[var(--panel)]",
+                        )}
                       >
                         {selectedFile ? (
-                          <div className="flex w-full flex-wrap items-center justify-between gap-4 text-left">
-                            <div className="flex items-center gap-3">
-                              <span className="dashboard-icon-chip h-11 w-11 rounded-[1rem] bg-orange-100 text-[color:var(--accent)]">
-                                <ImageStackIcon />
-                              </span>
-                              <div className="min-w-0">
-                                <p className="truncate text-sm font-semibold text-slate-950">
-                                  {selectedFile.name}
-                                </p>
-                                <p className="mt-1 text-xs text-slate-500">
-                                  {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
-                                </p>
-                              </div>
-                            </div>
-                            <span className="rounded-full border border-orange-200 bg-white px-3 py-1 text-xs font-semibold text-[color:var(--accent)]">
-                              点击更换
-                            </span>
-                          </div>
-                        ) : (
                           <>
-                            <span className="dashboard-icon-chip h-12 w-12 rounded-[1rem] bg-white text-[color:var(--accent)]">
-                              <UploadModeIcon />
-                            </span>
-                            <p className="mt-4 text-sm font-semibold text-slate-900">
-                              Drop your base image here or click to browse
-                            </p>
-                            <p className="mt-2 max-w-xs text-xs leading-6 text-slate-500">
-                              ListingLens 会保留商品主体与卖点层级，再生成适合目标市场的主图版本。
-                            </p>
+                            <div className="h-10 w-10 shrink-0 overflow-hidden rounded border border-[var(--border)] bg-[var(--panel-soft)]">
+                              {filePreviewUrl && (
+                                <img src={filePreviewUrl} alt="" className="h-full w-full object-cover" />
+                              )}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-[12.5px] font-medium text-[var(--ink)]">{selectedFile.name}</p>
+                              <p className="text-[11px] text-[var(--ink3)]">{(selectedFile.size / 1024 / 1024).toFixed(2)} MB · 已就绪</p>
+                            </div>
+                            <span className="shrink-0 text-[11px] text-[color:var(--accent)]">更换</span>
                           </>
+                        ) : (
+                          <div className="flex w-full flex-col items-center py-6 text-center">
+                            <UploadModeIcon />
+                            <p className="mt-2 text-[12.5px] font-medium text-[var(--ink2)]">点击或拖拽上传主图</p>
+                            <p className="mt-1 text-[11px] text-[var(--ink3)]">支持 JPG / PNG / WEBP / AVIF，建议 2000px 以上</p>
+                          </div>
                         )}
                       </button>
-                    </section>
+                    </>
                   ) : (
-                    <section className="dashboard-subpanel rounded-[1.6rem] p-4">
-                      <div>
-                        <FieldHeading label="Product Image URL" title="商品图片链接" />
-                        <h3 className="font-heading text-lg font-bold text-slate-950">抓取商品图片</h3>
-                        <p className="mt-1 text-xs leading-5 text-slate-500">
-                          输入商品图片 URL 链接，服务端会提取图片。
-                        </p>
-                      </div>
-
-                      <div className="mt-4 space-y-3">
+                    <>
+                      <p className={FIELD_LABEL_CLASS}>商品图片链接</p>
+                      <div className="flex gap-2">
                         <input
                           value={productUrl}
                           onChange={(event) => setProductUrl(event.target.value)}
                           placeholder="https://..."
                           className={INPUT_BASE_CLASS}
                         />
-
                         <button
                           type="button"
                           onClick={handleExtractImages}
                           disabled={isExtracting}
-                          className="dashboard-dark-button inline-flex min-h-11 items-center justify-center px-5 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-45"
+                          className="dashboard-dark-button shrink-0 px-3 py-2 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                          {isExtracting ? "正在抓取图片..." : "抓取商品图片"}
+                          {isExtracting ? "抓取中…" : "抓取"}
                         </button>
-
-                        {extractError ? (
-                          <p className="rounded-[1.2rem] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                            {extractError}
-                          </p>
-                        ) : null}
-
-                        {extractedImages.length ? (
-                          <div className="space-y-3 pt-2">
-                            <div className="flex items-center justify-between gap-3">
-                              <div>
-                                <FieldHeading label="Candidate Images" title="候选主图" />
-                              </div>
-                              <p className="text-xs text-slate-500">点击卡片即可选中</p>
-                            </div>
-
-                            <div className="grid gap-3 sm:grid-cols-2">
-                              {extractedImages.map((image) => {
-                                const isSelected = selectedImageUrl === image.url;
-
-                                return (
-                                  <button
-                                    key={image.url}
-                                    type="button"
-                                    onClick={() => {
-                                      setSelectedImageUrl(image.url);
-                                      setFormError("");
-                                    }}
-                                    className={cx(
-                                      "dashboard-subpanel overflow-hidden rounded-[1.35rem] border text-left transition",
-                                      isSelected
-                                        ? "border-[color:var(--border-strong)] ring-2 ring-[color:var(--accent-ring)]"
-                                        : "hover:border-[color:var(--border-strong)]",
-                                    )}
-                                  >
-                                    <div className="dashboard-preview-surface aspect-[4/3] overflow-hidden">
-                                      <img
-                                        src={buildProxyImageUrl(image.url)}
-                                        alt="候选商品图"
-                                        className="h-full w-full object-cover"
-                                      />
-                                    </div>
-                                    <div className="space-y-1 px-3 py-3">
-                                      <div className="flex items-center justify-between gap-2">
-                                        <p className="truncate text-sm font-semibold text-slate-950">
-                                          {image.source}
-                                        </p>
-                                        {isSelected ? (
-                                          <span className="rounded-full bg-[var(--accent-soft)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.18em] text-[color:var(--accent)]">
-                                            Selected
-                                          </span>
-                                        ) : null}
-                                      </div>
-                                      <p className="line-clamp-2 text-xs leading-5 text-slate-500">
-                                        {image.url}
-                                      </p>
-                                    </div>
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        ) : null}
                       </div>
-                    </section>
+
+                      {extractError ? (
+                        <p className="rounded border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                          {extractError}
+                        </p>
+                      ) : null}
+
+                      {extractedImages.length ? (
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <p className={FIELD_LABEL_CLASS}>候选主图 · 点击选中</p>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            {extractedImages.map((image) => {
+                              const isSelected = selectedImageUrl === image.url;
+                              return (
+                                <button
+                                  key={image.url}
+                                  type="button"
+                                  onClick={() => { setSelectedImageUrl(image.url); setFormError(""); }}
+                                  className={cx(
+                                    "overflow-hidden rounded border text-left transition",
+                                    isSelected
+                                      ? "border-[color:var(--accent)]"
+                                      : "border-[var(--border)] hover:border-[color:var(--accent)]",
+                                  )}
+                                >
+                                  <div className="aspect-[4/3] overflow-hidden bg-[var(--panel-soft)]">
+                                    <img src={buildProxyImageUrl(image.url)} alt="" className="h-full w-full object-cover" />
+                                  </div>
+                                  <div className="flex items-center justify-between px-2 py-1.5">
+                                    <p className="truncate text-[10.5px] font-mono text-[var(--ink3)]">{image.source}</p>
+                                    {isSelected && (
+                                      <span className="ml-1 shrink-0 text-[10px] font-semibold text-[color:var(--accent)]">✓</span>
+                                    )}
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ) : null}
+                    </>
                   )}
                 </div>
               </div>
             </section>
 
-            <section className="dashboard-panel flex min-h-0 flex-col overflow-hidden rounded-[2rem]">
-              <PanelHeader
-                icon={<ConfigureIcon />}
-                label="Configuration"
-                title="生成参数"
-                subtitle="配置语言、比例、分辨率、模型和补充说明。"
-                step="Step 2"
-              />
+            {/* ── Step 2: Config ── */}
+            <section className="dashboard-panel flex min-h-0 flex-col overflow-hidden rounded-lg">
+              <PanelHeader title="生成参数" step="Step 2" />
 
               <div className={PANEL_SCROLL_AREA_CLASS}>
                 <div className="space-y-4">
-                  <section className="dashboard-subpanel rounded-[1.6rem] p-4">
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      <div className="sm:col-span-2">
-                        <div className="mb-2 flex items-center justify-between gap-3">
-                          <FieldHeading label="Model Family" title="模型系列" />
-                          <span className="text-xs text-slate-500">先选模型，再配置它支持的比例、分辨率和其他参数</span>
-                        </div>
-                        <div className="grid gap-2 lg:grid-cols-2">
-                          {selectableModelFamilies.map((modelFamily) => (
-                            <ModelFamilyCard
-                              key={modelFamily.id}
-                              active={modelFamily.id === modelFamilyId}
-                              title={modelFamily.label}
-                              description={modelFamily.description}
-                              priceLabel={
-                                getModelFamilyDisplayAttempt({
-                                  modelFamilyId: modelFamily.id,
-                                  resolutionId,
-                                  aspectRatioId: aspectRatio,
-                                }).priceLabel
-                              }
-                              onClick={() => handleModelFamilyChange(modelFamily.id)}
-                            />
-                          ))}
-                        </div>
-                      </div>
 
-                      {selectionNotice ? (
-                        <div className="sm:col-span-2 rounded-[1.2rem] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                          {selectionNotice}
-                        </div>
-                      ) : null}
-
-                      <div>
-                        <FieldHeading label="Source Language" title="源语言" />
-                        <select
-                          value={sourceLanguage}
-                          onChange={(event) => setSourceLanguage(event.target.value)}
-                          className={INPUT_BASE_CLASS}
-                        >
-                          <option value="">自动识别（未指定）</option>
-                          {LANGUAGE_OPTIONS.map((language) => (
-                            <option key={language.value} value={language.value}>
-                              {language.label}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div>
-                        <FieldHeading label="Target Language" title="目标语言" />
-                        <select
-                          value={targetLanguage}
-                          onChange={(event) => setTargetLanguage(event.target.value)}
-                          className={INPUT_BASE_CLASS}
-                          required
-                        >
-                          {LANGUAGE_OPTIONS.map((language) => (
-                            <option key={language.value} value={language.value}>
-                              {language.label}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div className="sm:col-span-2">
-                        <div className="mb-2 flex items-center justify-between gap-3">
-                          <FieldHeading label="Aspect Ratio" title="输出画面比例" />
-                          <span className="text-xs text-slate-500">按当前模型能力展示可用画幅</span>
-                        </div>
-                        <div className="grid gap-2 md:grid-cols-3">
-                          {visibleAspectRatioOptions.map((option) => (
-                            <OptionCard
-                              key={option.id}
-                              active={option.id === aspectRatio}
-                              title={option.label}
-                              description={option.description}
-                              onClick={() => {
-                                setAspectRatio(option.id);
-                                setSelectionNotice("");
-                                setResolutionNotice("");
-                                setFormError("");
-                              }}
-                            />
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className="sm:col-span-2">
-                        <div className="mb-2 flex items-center justify-between gap-3">
-                          <FieldHeading label="Resolution" title="分辨率" />
-                          <p className="text-xs text-slate-500">会按模型能力锁定或映射到对应 size / 模型版本</p>
-                        </div>
-                        <div className="grid gap-2 lg:grid-cols-3">
-                          {RESOLUTION_OPTIONS.map((resolution) => (
-                            <OptionCard
-                              key={resolution.id}
-                              active={resolution.id === resolutionId}
-                              title={resolution.label}
-                              description={resolution.description}
-                              disabled={!supportedResolutionIds.includes(resolution.id)}
-                              onClick={() => {
-                                setResolutionNotice(
-                                  getResolutionPriceChangeNotice({
-                                    modelFamilyId: activeModelFamily.id,
-                                    currentResolutionId: resolutionId,
-                                    nextResolutionId: resolution.id,
-                                    aspectRatioId: aspectRatio,
-                                  }),
-                                );
-                                setResolutionId(resolution.id);
-                                setSelectionNotice("");
-                                setFormError("");
-                              }}
-                            />
-                          ))}
-                        </div>
-                        {resolutionNotice ? (
-                          <div className="mt-2 rounded-[1rem] border border-orange-200 bg-[linear-gradient(180deg,rgba(255,242,235,0.92),rgba(255,250,246,0.96))] px-3 py-2 text-xs leading-5 text-[color:var(--accent-strong)]">
-                            {resolutionNotice}
-                          </div>
-                        ) : null}
-                      </div>
-
-                      <div className="sm:col-span-2">
-                        <div className="mb-2 flex items-center justify-between gap-3">
-                          <FieldHeading label="Creative Preset" title="提示词预设" />
-                          <span className="text-xs text-slate-500">保留商品信息前提下定义输出语气</span>
-                        </div>
-                        <div className="grid gap-2 lg:grid-cols-3">
-                          {PROMPT_PRESETS.map((preset, index) => (
-                            <PresetCard
-                              key={preset.id}
-                              active={preset.id === presetId}
-                              title={preset.name}
-                              description={preset.summary}
-                              iconTone={index}
-                              onClick={() => setPresetId(preset.id)}
-                            />
-                          ))}
-                        </div>
-                        <button
-                          type="button"
-                          disabled={!canExtractSellingPoints}
-                          onClick={() => setExtractSellingPoints(!extractSellingPoints)}
-                          className={cx(
-                            "mt-3 w-full rounded-[1.2rem] border px-4 py-3 text-left transition disabled:cursor-not-allowed disabled:opacity-60",
-                            extractSellingPoints
-                              ? "border-[color:var(--border-strong)] bg-[linear-gradient(180deg,rgba(255,241,233,0.98),rgba(255,249,245,1))] ring-2 ring-[color:var(--accent-ring)]"
-                              : "border-slate-200 bg-white hover:border-[color:var(--border-strong)] hover:bg-white",
-                          )}
-                        >
-                          <div className="flex items-center gap-3">
+                  {/* Model radio list */}
+                  <div>
+                    <p className={FIELD_LABEL_CLASS}>模型系列</p>
+                    <div className="flex flex-col gap-1">
+                      {selectableModelFamilies.map((modelFamily) => {
+                        const active = modelFamily.id === modelFamilyId;
+                        const displayAttempt = getModelFamilyDisplayAttempt({ modelFamilyId: modelFamily.id, resolutionId, aspectRatioId: aspectRatio });
+                        return (
+                          <button
+                            key={modelFamily.id}
+                            type="button"
+                            onClick={() => handleModelFamilyChange(modelFamily.id)}
+                            className={cx(
+                              "flex items-center gap-2.5 rounded-md border px-3 py-2 text-left transition",
+                              active
+                                ? "border-slate-900 bg-slate-900 text-white"
+                                : "border-[var(--border)] bg-[var(--panel)] text-[var(--ink)] hover:border-[var(--ink2)]",
+                            )}
+                          >
                             <span className={cx(
-                              "dashboard-icon-chip h-9 w-9 shrink-0 rounded-[0.75rem] text-base transition",
-                              extractSellingPoints ? "bg-white text-[color:var(--accent)]" : "bg-slate-100 text-slate-400",
+                              "flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border transition",
+                              active ? "border-white bg-white" : "border-[var(--ink3)] bg-transparent",
                             )}>
-                              <SparkIcon />
+                              {active && <span className="h-1.5 w-1.5 rounded-full bg-slate-900" />}
                             </span>
                             <div className="min-w-0 flex-1">
-                              <p className="font-heading text-sm font-bold text-slate-950">提炼图片卖点</p>
-                              <p className="mt-0.5 text-xs leading-5 text-slate-500">
-                                {canExtractSellingPoints
-                                  ? "叠加设计感目标语言卖点文字，生成后提供中文对照"
-                                  : "当前模型返回 base64 本地图片，不支持卖点提炼"}
-                              </p>
+                              <span className={cx("text-[12.5px] font-semibold", active ? "text-white" : "text-[var(--ink)]")}>
+                                {modelFamily.label}
+                              </span>
+                              <span className={cx("ml-2 truncate text-[11px]", active ? "text-white/65" : "text-[var(--ink3)]")}>
+                                {modelFamily.description}
+                              </span>
                             </div>
-                            <span className={cx(
-                              "flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition",
-                              extractSellingPoints && canExtractSellingPoints
-                                ? "border-[color:var(--accent)] bg-[color:var(--accent)] text-white"
-                                : "border-slate-300 bg-white",
-                            )}>
-                              {extractSellingPoints && canExtractSellingPoints && (
-                                <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
-                                  <path d="M1 4l2.5 2.5L9 1" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-                                </svg>
-                              )}
+                            <span className={cx("shrink-0 font-mono-code text-[11px] tabular-nums", active ? "text-white/80" : "text-[var(--ink2)]")}>
+                              {displayAttempt.priceLabel}
                             </span>
-                          </div>
-                        </button>
-                      </div>
-
-                      <div className="sm:col-span-2">
-                        <FieldHeading label="Additional Notes" title="补充说明" />
-                        <textarea
-                          value={customPrompt}
-                          onChange={(event) => setCustomPrompt(event.target.value)}
-                          rows={3}
-                          placeholder="例如：保留产品当前位置，突出防水卖点，整体风格更偏 TikTokShop 菲律宾市场。"
-                          className={cx(INPUT_BASE_CLASS, "min-h-28 resize-y")}
-                        />
-                      </div>
-
-                      <div className="sm:col-span-2 rounded-[1.35rem] border border-orange-200 bg-[linear-gradient(180deg,rgba(255,242,235,0.95),rgba(255,250,246,0.98))] px-4 py-4 text-sm leading-6 text-slate-700">
-                        <div className="flex items-start gap-3">
-                          <span className="dashboard-icon-chip mt-0.5 h-10 w-10 rounded-[0.9rem] bg-white text-[color:var(--accent)]">
-                            <SparkIcon />
-                          </span>
-                          <div className="min-w-0">
-                            <p className="font-heading text-base font-bold text-slate-950">当前生成策略</p>
-                            <p className="mt-1">
-                              {activePreset.name}。系统会优先保留商品主体、构图和真实信息；
-                              {sourceLanguage.trim()
-                                ? `会把图中文字从 ${sourceLanguage.trim()} 转成 ${targetLanguage.trim()}。`
-                                : "若检测到图中已有文字，会自动翻译成目标语言；若没有文字，则只做主图美化。"}
-                            </p>
-                            <p className="mt-2">输出画面会尽量按 {activeAspectRatio.label} 生成。</p>
-                            <p className="mt-2 text-xs leading-6 text-slate-500">
-                              当前主模型 {activeModelName}
-                              {primaryAttempt.size ? `，输出 size ${primaryAttempt.size}` : ""}。
-                            </p>
-                            <p className="mt-2 text-xs leading-6 text-slate-500">
-                              如果商品站点禁止浏览器直接读取候选图，URL 抓图后可能无法直接生成，此时请把主图下载后改用本地上传。
-                            </p>
-                          </div>
-                        </div>
-                      </div>
+                          </button>
+                        );
+                      })}
                     </div>
-                  </section>
+                    {selectionNotice ? (
+                      <p className="mt-2 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">{selectionNotice}</p>
+                    ) : null}
+                  </div>
+
+                  {/* Languages */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <p className={FIELD_LABEL_CLASS}>源语言</p>
+                      <select value={sourceLanguage} onChange={(e) => setSourceLanguage(e.target.value)} className={cx(INPUT_BASE_CLASS, "!text-xs")}>
+                        <option value="">自动识别</option>
+                        {LANGUAGE_OPTIONS.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <p className={FIELD_LABEL_CLASS}>目标语言</p>
+                      <select value={targetLanguage} onChange={(e) => setTargetLanguage(e.target.value)} className={cx(INPUT_BASE_CLASS, "!text-xs")} required>
+                        {LANGUAGE_OPTIONS.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Aspect ratio visual thumbnails */}
+                  <div>
+                    <p className={FIELD_LABEL_CLASS}>输出比例</p>
+                    <div className="grid grid-cols-7 gap-1">
+                      {visibleAspectRatioOptions.map((option) => {
+                        const active = option.id === aspectRatio;
+                        const [w, h] = option.aspectRatio.split(" / ").map(Number);
+                        const maxW = 32; const maxH = 32;
+                        const scale = Math.min(maxW / w, maxH / h);
+                        const tw = Math.round(w * scale); const th = Math.round(h * scale);
+                        return (
+                          <button
+                            key={option.id}
+                            type="button"
+                            title={option.label}
+                            onClick={() => { setAspectRatio(option.id); setSelectionNotice(""); setResolutionNotice(""); setFormError(""); }}
+                            className={cx(
+                              "flex aspect-square flex-col items-center justify-center gap-1 rounded border transition",
+                              active
+                                ? "border-[color:var(--accent)] bg-[var(--accent-soft)]"
+                                : "border-[var(--border)] bg-[var(--panel)] hover:border-[var(--ink3)]",
+                            )}
+                          >
+                            <div
+                              style={{ width: tw, height: th }}
+                              className={cx(
+                                "rounded-[1px] border",
+                                active ? "border-[color:var(--accent)]" : "border-[var(--ink3)]",
+                              )}
+                            />
+                            <span className={cx("font-mono-code text-[8.5px] leading-none tabular-nums", active ? "text-[color:var(--accent-strong)]" : "text-[var(--ink3)]")}>
+                              {option.id}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Resolution */}
+                  <div>
+                    <p className={FIELD_LABEL_CLASS}>分辨率</p>
+                    <div className="grid grid-cols-3 gap-1">
+                      {RESOLUTION_OPTIONS.map((resolution) => {
+                        const active = resolution.id === resolutionId;
+                        const disabled = !supportedResolutionIds.includes(resolution.id);
+                        return (
+                          <button
+                            key={resolution.id}
+                            type="button"
+                            disabled={disabled}
+                            onClick={() => {
+                              setResolutionNotice(getResolutionPriceChangeNotice({ modelFamilyId: activeModelFamily.id, currentResolutionId: resolutionId, nextResolutionId: resolution.id, aspectRatioId: aspectRatio }));
+                              setResolutionId(resolution.id);
+                              setSelectionNotice(""); setFormError("");
+                            }}
+                            className={cx(
+                              "rounded-md border px-2 py-2 text-left transition disabled:cursor-not-allowed disabled:opacity-40",
+                              active
+                                ? "border-[color:var(--accent)] bg-[var(--accent-soft)]"
+                                : "border-[var(--border)] bg-[var(--panel)] hover:border-[var(--ink3)]",
+                            )}
+                          >
+                            <p className={cx("text-[12px] font-semibold", active ? "text-[color:var(--accent-strong)]" : "text-[var(--ink)]")}>{resolution.label}</p>
+                            <p className={cx("text-[10px]", active ? "text-[color:var(--accent)]" : "text-[var(--ink3)]")}>{resolution.description}</p>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {resolutionNotice ? (
+                      <p className="mt-1.5 rounded border border-[color:var(--accent-soft)] bg-[var(--accent-soft)] px-3 py-1.5 text-[11px] text-[color:var(--accent-strong)]">{resolutionNotice}</p>
+                    ) : null}
+                  </div>
+
+                  {/* Preset radio list */}
+                  <div>
+                    <p className={FIELD_LABEL_CLASS}>创意预设</p>
+                    <div className="flex flex-col gap-1">
+                      {PROMPT_PRESETS.map((preset) => {
+                        const active = preset.id === presetId;
+                        return (
+                          <button
+                            key={preset.id}
+                            type="button"
+                            onClick={() => setPresetId(preset.id)}
+                            className={cx(
+                              "flex items-center gap-2.5 rounded-md border px-3 py-2 text-left transition",
+                              active
+                                ? "border-[var(--border)] bg-[var(--panel-soft)]"
+                                : "border-[var(--border)] bg-[var(--panel)] hover:bg-[var(--panel-soft)]",
+                            )}
+                          >
+                            <span className={cx(
+                              "flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border transition",
+                              active ? "border-slate-900 bg-slate-900" : "border-[var(--ink3)] bg-transparent",
+                            )}>
+                              {active && <span className="h-1.5 w-1.5 rounded-full bg-white" />}
+                            </span>
+                            <div className="min-w-0">
+                              <span className="text-[12.5px] font-medium text-[var(--ink)]">{preset.name}</span>
+                              <span className="ml-1.5 text-[11px] text-[var(--ink3)]">{preset.summary}</span>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                  </div>
+
+                  {/* Image adjustments */}
+                  <div>
+                    <p className={FIELD_LABEL_CLASS}>图片调整 <span className="normal-case font-normal text-[var(--muted)]">· 可选</span></p>
+                    <div className="flex flex-col gap-1.5">
+                      {/* Extract selling points */}
+                      <button
+                        type="button"
+                        disabled={!canExtractSellingPoints}
+                        onClick={() => setExtractSellingPoints(!extractSellingPoints)}
+                        className={cx(
+                          "flex w-full items-center gap-2.5 rounded-md border px-3 py-2 text-left transition disabled:cursor-not-allowed disabled:opacity-50",
+                          extractSellingPoints && canExtractSellingPoints
+                            ? "border-[color:var(--accent)] bg-[var(--accent-soft)]"
+                            : "border-[var(--border)] bg-[var(--panel)] hover:bg-[var(--panel-soft)]",
+                        )}
+                      >
+                        <span className={cx(
+                          "flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border transition",
+                          extractSellingPoints && canExtractSellingPoints
+                            ? "border-[color:var(--accent)] bg-[color:var(--accent)]"
+                            : "border-[var(--ink3)] bg-transparent",
+                        )}>
+                          {extractSellingPoints && canExtractSellingPoints && (
+                            <svg width="9" height="7" viewBox="0 0 9 7" fill="none">
+                              <path d="M1 3.5l2.2 2.2L8 1" stroke="white" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                          )}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <span className={cx("text-[12.5px] font-medium", extractSellingPoints && canExtractSellingPoints ? "text-[color:var(--accent-strong)]" : "text-[var(--ink)]")}>
+                            提炼图片卖点
+                          </span>
+                          <span className="ml-1.5 text-[11px] text-[var(--ink3)]">
+                            {canExtractSellingPoints ? "生成后识别卖点文字并提供中文对照" : "当前模型不支持卖点提炼"}
+                          </span>
+                        </div>
+                      </button>
+
+                      {/* Adjust product angle */}
+                      <button
+                        type="button"
+                        onClick={() => setAdjustProductAngle(!adjustProductAngle)}
+                        className={cx(
+                          "flex w-full items-center gap-2.5 rounded-md border px-3 py-2 text-left transition",
+                          adjustProductAngle
+                            ? "border-[color:var(--accent)] bg-[var(--accent-soft)]"
+                            : "border-[var(--border)] bg-[var(--panel)] hover:bg-[var(--panel-soft)]",
+                        )}
+                      >
+                        <span className={cx(
+                          "flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border transition",
+                          adjustProductAngle
+                            ? "border-[color:var(--accent)] bg-[color:var(--accent)]"
+                            : "border-[var(--ink3)] bg-transparent",
+                        )}>
+                          {adjustProductAngle && (
+                            <svg width="9" height="7" viewBox="0 0 9 7" fill="none">
+                              <path d="M1 3.5l2.2 2.2L8 1" stroke="white" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                          )}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <span className={cx("text-[12.5px] font-medium", adjustProductAngle ? "text-[color:var(--accent-strong)]" : "text-[var(--ink)]")}>
+                            修改商品角度
+                          </span>
+                          <span className="ml-1.5 text-[11px] text-[var(--ink3)]">调整商品展示视角，保持细节不变</span>
+                        </div>
+                      </button>
+
+                      {/* Match background to product info */}
+                      <button
+                        type="button"
+                        onClick={() => setMatchBackgroundToProductInfo(!matchBackgroundToProductInfo)}
+                        className={cx(
+                          "flex w-full items-center gap-2.5 rounded-md border px-3 py-2 text-left transition",
+                          matchBackgroundToProductInfo
+                            ? "border-[color:var(--accent)] bg-[var(--accent-soft)]"
+                            : "border-[var(--border)] bg-[var(--panel)] hover:bg-[var(--panel-soft)]",
+                        )}
+                      >
+                        <span className={cx(
+                          "flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border transition",
+                          matchBackgroundToProductInfo
+                            ? "border-[color:var(--accent)] bg-[color:var(--accent)]"
+                            : "border-[var(--ink3)] bg-transparent",
+                        )}>
+                          {matchBackgroundToProductInfo && (
+                            <svg width="9" height="7" viewBox="0 0 9 7" fill="none">
+                              <path d="M1 3.5l2.2 2.2L8 1" stroke="white" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                          )}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <span className={cx("text-[12.5px] font-medium", matchBackgroundToProductInfo ? "text-[color:var(--accent-strong)]" : "text-[var(--ink)]")}>
+                            根据商品信息匹配背景
+                          </span>
+                          <span className="ml-1.5 text-[11px] text-[var(--ink3)]">根据商品用途与属性，匹配更适合的场景背景，不添加卖点文字</span>
+                        </div>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Custom prompt */}
+                  <div>
+                    <p className={FIELD_LABEL_CLASS}>补充说明 <span className="normal-case font-normal text-[var(--muted)]">· 可选</span></p>
+                    <textarea
+                      value={customPrompt}
+                      onChange={(e) => setCustomPrompt(e.target.value)}
+                      rows={3}
+                      placeholder="例如：保留产品位置，突出防水卖点，整体风格偏 TikTokShop 菲律宾市场。"
+                      className={cx(INPUT_BASE_CLASS, "resize-y !text-xs")}
+                    />
+                  </div>
 
                   {formError ? (
-                    <p className="rounded-[1.2rem] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                      {formError}
-                    </p>
+                    <p className="rounded border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{formError}</p>
                   ) : null}
-
-                  <div className="dashboard-subpanel flex flex-col gap-3 rounded-[1.6rem] p-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="min-w-0">
-                      <p className={FIELD_LABEL_CLASS}>Render Setup</p>
-                      <p className="font-heading text-lg font-bold text-slate-950">
-                        {activeModelFamily.label} · {activeResolution.label}
-                      </p>
-                      <p className="truncate text-sm leading-6 text-slate-500">
-                        当前模型 {activeModelName}
-                        {primaryAttempt.size ? `（size ${primaryAttempt.size}）` : ""}
-                        ，输出比例 {activeAspectRatio.id}，单次成本{" "}
-                        {primaryAttempt.priceLabel}。
-                      </p>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={handleGenerate}
-                      disabled={!canGenerate || isGenerating}
-                      className="dashboard-dark-button inline-flex min-h-12 items-center justify-center gap-2 whitespace-nowrap px-6 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-45"
-                    >
-                      <MagicWandIcon />
-                      {isGenerating ? "正在生成主图..." : "生成优化图片"}
-                    </button>
-                  </div>
                 </div>
+              </div>
+
+              <div className="flex shrink-0 items-center gap-3 border-t border-slate-200/80 bg-[var(--panel-soft)] px-5 py-3">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.3em] text-slate-500">
+                    配置完成后生成
+                  </p>
+                  <p className="mt-0.5 truncate text-[11px] tabular-nums text-slate-600">
+                    {costSummary}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleGenerate}
+                  disabled={!canGenerate || isGenerating}
+                  className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-5 py-2.5 text-[13px] font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isGenerating ? (
+                    <SpinnerIcon />
+                  ) : (
+                    <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
+                      <path d="M12 2.5 13.9 8l5.6 1.9-5.6 1.9L12 17.5l-1.9-5.7L4.5 9.9 10.1 8 12 2.5Z" />
+                    </svg>
+                  )}
+                  {isGenerating ? "生成中…" : "生成主图"}
+                  {!isGenerating ? (
+                    <span className="text-[10px] font-normal opacity-60">⌘⏎</span>
+                  ) : null}
+                </button>
               </div>
             </section>
 
-            <section className="dashboard-panel flex min-h-0 flex-col overflow-hidden rounded-[2rem]">
-              <PanelHeader
-                icon={<PreviewPanelIcon />}
-                label="Preview & Result"
-                title="预览与结果"
-                subtitle="左看输入图，右看生成图；部分模型提供 URL，部分模型仅支持本地预览与下载。"
-                step="Step 3"
-              />
+            <section className="dashboard-panel flex min-h-0 flex-col overflow-hidden rounded-lg">
+              <PanelHeader title="预览与输出" step="Step 3" />
 
               <div className={PANEL_SCROLL_AREA_CLASS}>
-                <div className="space-y-4">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <InlineStatusChip label="输出比例" value={resultAspectRatio.id} />
-                    <InlineStatusChip label="分辨率" value={resultResolution.label} />
-                    <InlineStatusChip label="模型" value={resultModelLabel} />
+                <div className="space-y-3">
+                  {/* Status chips row */}
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {[
+                      { label: "比例", value: resultAspectRatio.id },
+                      { label: "分辨率", value: resultResolution.label },
+                      { label: "模型", value: resultModelLabel },
+                    ].map(({ label, value }) => (
+                      <span
+                        key={label}
+                        className="inline-flex items-center gap-1.5 rounded border border-[var(--border)] bg-[var(--panel-soft)] px-2 py-0.5 text-[10.5px] text-[var(--ink3)]"
+                      >
+                        <span className="font-semibold uppercase tracking-[0.12em]">{label}</span>
+                        <span className="text-[var(--ink2)]">{value}</span>
+                      </span>
+                    ))}
                   </div>
 
-                  <div className="grid gap-4 xl:grid-cols-2">
+                  <div className="grid gap-3 xl:grid-cols-2">
                     <PreviewCard
                       key={sourcePreview || "source-empty"}
-                      eyebrow="Original Input"
                       title="原始主图"
                       subtitle={uploadMode === "file" ? "本地上传" : "URL 候选图"}
                       imageUrl={sourcePreview}
                       aspectRatio={activeAspectRatio.aspectRatio}
                       emptyState="上传主图，或先从商品图片 URL 中抓取并选择候选图。"
-                      badge={sourcePreview ? "Source Ready" : ""}
+                      accent={false}
                       onOpenImage={() => setIsComparisonOpen(true)}
                     />
 
                     <PreviewCard
                       key={result?.imageUrl || "result-empty"}
-                      eyebrow="AI Intelligence Layer"
                       title="生成结果"
                       subtitle={result ? "AI 输出" : "等待生成"}
                       imageUrl={result?.imageUrl ?? ""}
                       aspectRatio={resultAspectRatio.aspectRatio}
-                      emptyState="完成配置后点击“生成优化图片”，这里会展示最终结果。"
-                      badge={result?.imageUrl ? "Processed 100%" : "Waiting"}
+                      emptyState="完成配置后点击「生成主图」，这里会展示最终结果。"
                       accent
                       onOpenImage={() => setIsComparisonOpen(true)}
                     />
                   </div>
 
-                  <div className="dashboard-subpanel rounded-[1.6rem] p-4">
+                  {showSellingPointsPanel ? (
+                    <div className="overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--panel)]">
+                      <div className="flex items-center justify-between border-b border-[var(--border)] bg-[var(--panel-soft)] px-4 py-2.5">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <span className="text-[color:var(--accent)]">
+                            <svg viewBox="0 0 24 24" fill="currentColor" className="h-[11px] w-[11px]">
+                              <path d="M12 2.5 13.9 8l5.6 1.9-5.6 1.9L12 17.5l-1.9-5.7L4.5 9.9 10.1 8 12 2.5Z" />
+                            </svg>
+                          </span>
+                          <span className="text-[11.5px] font-semibold tracking-[-0.01em] text-[var(--ink)]">
+                            卖点文字识别
+                          </span>
+                          <span className="truncate text-[10.5px] text-[var(--ink3)]">
+                            从图片中提炼 · {targetLanguage.trim() || "目标语言"} 覆层 + 中文对照
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleCopySellingPoints}
+                          disabled={isAnalyzing || isSellingPointsEmptyState}
+                          className="inline-flex shrink-0 items-center gap-1 rounded border border-[var(--border)] bg-[var(--panel)] px-2 py-0.5 text-[10.5px] text-[var(--ink2)] transition hover:bg-[var(--panel-soft)] disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          <CopyIcon />
+                          {copiedSellingPoints ? "已复制" : "复制全部"}
+                        </button>
+                      </div>
+                      <div className="px-4 py-3">
+                        {isAnalyzing ? (
+                          <p className="py-3 text-center text-[11.5px] text-[var(--ink3)]">
+                            正在识别图片中的卖点文字…
+                          </p>
+                        ) : sellingPointsFromResponse === null ? (
+                          <p className="py-3 text-center text-[11.5px] text-[var(--ink3)]">
+                            请勾选后重新生成图片以提炼卖点 / Regenerate with this option enabled to extract selling points
+                          </p>
+                        ) : isSellingPointsEmptyState ? (
+                          <p className="py-3 text-center text-[11.5px] text-[var(--ink3)]">
+                            {sellingPointsError ?? "未从图片中识别到明显卖点 / No prominent selling points detected"}
+                          </p>
+                        ) : (
+                          sellingPointsFromResponse.map((item, index) => (
+                            <div
+                              key={`${item.target}-${index}`}
+                              className={cx(
+                                "grid grid-cols-[20px_1fr_1fr] items-baseline gap-3 py-1.5 hover:bg-[var(--panel-soft)]",
+                                index < sellingPointsFromResponse.length - 1
+                                  ? "border-b border-[var(--line-soft)]"
+                                  : "",
+                              )}
+                            >
+                              <span className="font-mono-code text-[10px] tabular-nums text-[var(--muted)]">
+                                {String(index + 1).padStart(2, "0")}
+                              </span>
+                              <div className="font-serif text-[13px] font-medium tracking-[-0.01em] text-[var(--ink)]">
+                                {item.target}
+                              </div>
+                              <div className="text-[12px] leading-[1.45] text-[var(--ink2)]">
+                                {item.zh}
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {/* Result delivery */}
+                  <div className="rounded-md border border-[var(--border)] bg-[var(--panel-soft)]">
                     {result?.usedFallback ? (
-                      <div className="mb-4 rounded-[1.2rem] border border-orange-200 bg-[linear-gradient(180deg,rgba(255,242,235,0.95),rgba(255,250,246,0.98))] px-4 py-3 text-sm leading-6 text-slate-700">
+                      <div className="border-b border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 rounded-t-md">
                         已自动回退：{requestedResultModelFamily.label} → {result.actualModelLabel}
                       </div>
                     ) : null}
-
-                    <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
-                      <div className="min-w-0">
-                        <p className={FIELD_LABEL_CLASS}>Result Delivery</p>
-                        <p className="font-heading text-lg font-bold text-slate-950">
-                          {result?.deliveryKind === "local-data" || (!result && activeModelFamily.id === "gpt-image-1-5")
-                            ? "生成结果（本地预览）"
-                            : "生成图 URL"}
-                        </p>
-                        <p className="truncate text-xs leading-6 text-slate-500">
-                          {resultDeliveryDescription}
-                        </p>
+                    <div className="px-3 py-2.5">
+                      <p className={FIELD_LABEL_CLASS}>
+                        {result?.deliveryKind === "local-data" || (!result && activeModelFamily.id === "gpt-image-1-5")
+                          ? "生成结果（本地预览）"
+                          : "生成图 URL"}
+                      </p>
+                      <div className="dashboard-url-bar mt-1.5 px-3 py-2 text-xs leading-5">
+                        {result?.copyableImageUrl ||
+                          (result?.deliveryKind === "local-data"
+                            ? "当前模型返回本地预览数据，仅支持下载图片。"
+                            : "生成完成后，这里会展示服务商返回的图片 URL。")}
                       </div>
-
-                      <div className="flex shrink-0 items-center gap-2 whitespace-nowrap self-start">
-                        <button
-                          type="button"
-                          onClick={handleCopyResultUrl}
-                          disabled={!result?.copyableImageUrl}
-                          className="dashboard-secondary-button rounded-full px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-45"
-                        >
-                          {copied ? "已复制" : "复制 URL"}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleDownloadResultImage}
-                          disabled={!result?.imageUrl}
-                          className="dashboard-secondary-button rounded-full px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-45"
-                        >
-                          下载图片
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="dashboard-url-bar mt-3 px-4 py-3 text-xs leading-6">
-                      {result?.copyableImageUrl ||
-                        (result?.deliveryKind === "local-data"
-                          ? "当前模型返回本地预览数据，仅支持下载图片。"
-                          : "生成完成后，这里会展示服务商返回的图片 URL。")}
-                    </div>
-
-                    {extractSellingPoints && (isAnalyzing || sellingPointsTranslation) ? (
-                      <div className="mt-4 rounded-[1.2rem] border border-orange-200 bg-[linear-gradient(180deg,rgba(255,242,235,0.95),rgba(255,250,246,0.98))] px-4 py-4">
-                        <p className={FIELD_LABEL_CLASS}>Selling Points</p>
-                        <p className="font-heading text-base font-bold text-slate-950">
-                          卖点文字识别
-                        </p>
-                        {isAnalyzing ? (
-                          <p className="mt-2 text-xs leading-6 text-slate-500">正在识别图片中的卖点文字…</p>
-                        ) : (
-                          <p className="mt-2 whitespace-pre-wrap text-xs leading-6 text-slate-600">
-                            {sellingPointsTranslation}
+                      {result?.revisedPrompt ? (
+                        <div className="mt-2.5">
+                          <p className={FIELD_LABEL_CLASS}>修订提示词</p>
+                          <p className="mt-1 whitespace-pre-wrap text-[11px] leading-[1.6] text-[var(--ink2)]">
+                            {result.revisedPrompt}
                           </p>
-                        )}
-                      </div>
-                    ) : null}
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
 
-                    {result?.revisedPrompt ? (
-                      <div className="mt-4 rounded-[1.2rem] border border-slate-200 bg-slate-50 px-4 py-4">
-                        <p className={FIELD_LABEL_CLASS}>Revised Prompt</p>
-                        <p className="font-heading text-base font-bold text-slate-950">
-                          服务端返回的修订提示词
-                        </p>
-                        <p className="mt-2 whitespace-pre-wrap text-xs leading-6 text-slate-600">
-                          {result.revisedPrompt}
-                        </p>
-                      </div>
-                    ) : null}
+                  <div className="flex items-center justify-end gap-2 pb-1">
+                    <button
+                      type="button"
+                      onClick={handleGenerate}
+                      disabled={!canGenerate || isGenerating}
+                      className="dashboard-secondary-button inline-flex items-center gap-1.5 px-3 py-[7px] text-xs font-medium disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <SwapIcon />
+                      重新生成
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCopyResultUrl}
+                      disabled={!result?.copyableImageUrl}
+                      className="dashboard-secondary-button inline-flex items-center gap-1.5 px-3 py-[7px] text-xs font-medium disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <CopyIcon />
+                      {copied ? "已复制" : "复制 URL"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleDownloadResultImage}
+                      disabled={!result?.imageUrl}
+                      className="dashboard-secondary-button inline-flex items-center gap-1.5 px-3 py-[7px] text-xs font-medium disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <DownloadIcon />
+                      下载
+                    </button>
                   </div>
                 </div>
               </div>
             </section>
           </section>
         </div>
-      </div>
 
       {isSettingsOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-4 py-6">
@@ -1213,35 +1318,35 @@ export function ListingLensApp() {
             aria-label="关闭 API Key 设置"
             onClick={() => setIsSettingsOpen(false)}
           />
-          <section className="dashboard-panel relative z-10 w-full max-w-lg rounded-[2rem] p-6 sm:p-7">
+          <section className="dashboard-panel relative z-10 w-full max-w-lg rounded-lg p-5">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className={FIELD_LABEL_CLASS}>API Key Settings</p>
-                <h2 className="dashboard-brand text-3xl font-extrabold tracking-tight text-slate-950">
+                <p className={FIELD_LABEL_CLASS}>API Key 设置</p>
+                <h2 className="mt-1 text-[17px] font-bold tracking-[-0.01em] text-[var(--ink)]">
                   管理本地预览所用的 API Key
                 </h2>
-                <p className="mt-2 text-sm leading-7 text-slate-600">
+                <p className="mt-1 text-[12.5px] leading-[1.6] text-[var(--ink3)]">
                   密钥只保存在当前浏览器本地，不写入服务器环境变量。
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setIsSettingsOpen(false)}
-                className="dashboard-secondary-button inline-flex h-10 w-10 items-center justify-center rounded-full text-slate-500"
+                className="dashboard-secondary-button inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md"
                 aria-label="关闭设置"
               >
                 <CloseIcon />
               </button>
             </div>
 
-            <div className="mt-6 space-y-4">
+            <div className="mt-5 space-y-4">
               <div>
-                <div className="mb-2 flex items-center justify-between gap-3">
+                <div className="mb-1.5 flex items-center justify-between gap-3">
                   <label className={FIELD_LABEL_CLASS}>API Key</label>
                   <button
                     type="button"
                     onClick={() => setApiKey("")}
-                    className="text-xs font-medium text-slate-500 transition hover:text-slate-900"
+                    className="text-[11px] font-medium text-[var(--ink3)] transition hover:text-[var(--ink)]"
                   >
                     清除本地保存
                   </button>
@@ -1256,19 +1361,19 @@ export function ListingLensApp() {
                 />
               </div>
 
-              <div className="flex flex-col gap-3 sm:flex-row">
+              <div className="flex flex-col gap-2.5 sm:flex-row">
                 <a
                   href="https://api.bltcy.ai/register?aff=kGaB90952"
                   target="_blank"
                   rel="noreferrer"
-                  className="dashboard-primary-button inline-flex min-h-11 flex-1 items-center justify-center px-5 text-sm font-semibold no-underline"
+                  className="dashboard-dark-button inline-flex min-h-10 flex-1 items-center justify-center px-5 text-[13px] font-semibold no-underline"
                 >
                   获取 API Key
                 </a>
                 <button
                   type="button"
                   onClick={() => setIsSettingsOpen(false)}
-                  className="dashboard-secondary-button inline-flex min-h-11 flex-1 items-center justify-center px-5 text-sm font-semibold"
+                  className="dashboard-secondary-button inline-flex min-h-10 flex-1 items-center justify-center px-5 text-[13px] font-semibold"
                 >
                   完成
                 </button>
@@ -1286,28 +1391,28 @@ export function ListingLensApp() {
             aria-label="关闭对比预览"
             onClick={() => setIsComparisonOpen(false)}
           />
-          <section className="relative z-10 flex max-h-[92vh] w-full max-w-7xl flex-col overflow-hidden rounded-[2rem] border border-white/10 bg-[#0f1217] shadow-[0_32px_100px_rgba(0,0,0,0.45)]">
+          <section className="relative z-10 flex max-h-[92vh] w-full max-w-7xl flex-col overflow-hidden rounded-xl border border-white/10 bg-[#0f1217] shadow-[0_32px_100px_rgba(0,0,0,0.45)]">
             <div className="flex items-start justify-between gap-4 border-b border-white/10 px-4 py-3 sm:px-5">
               <div className="min-w-0">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">
                   Compare Mode
                 </p>
-                <p className="mt-1 text-xl font-bold text-white">图片对比预览</p>
-                <p className="truncate text-xs text-slate-300">
+                <p className="mt-1 text-[17px] font-bold text-white">图片对比预览</p>
+                <p className="truncate text-[12px] text-slate-400">
                   左侧查看原始主图，右侧查看生成结果，便于直接对比细节变化。
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setIsComparisonOpen(false)}
-                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/5 text-slate-300 transition hover:bg-white/10 hover:text-white"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-white/10 bg-white/5 text-slate-400 transition hover:bg-white/10 hover:text-white"
                 aria-label="关闭对比预览"
               >
                 <CloseIcon />
               </button>
             </div>
-            <div className="min-h-0 flex-1 overflow-auto bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.08),transparent_40%),linear-gradient(180deg,rgba(24,28,35,0.98),rgba(12,14,18,0.98))] p-4 sm:p-6">
-              <div className="grid min-w-[980px] gap-4 lg:grid-cols-2">
+            <div className="min-h-0 flex-1 overflow-auto bg-[#0f1217] p-4 sm:p-5">
+              <div className="grid min-w-[980px] gap-3 lg:grid-cols-2">
                 <ComparisonPreviewCard
                   title="原始主图"
                   subtitle={uploadMode === "file" ? "本地上传" : "URL 候选图"}
@@ -1331,328 +1436,38 @@ export function ListingLensApp() {
   );
 }
 
-function PanelHeader({
-  icon,
-  label,
-  title,
-  subtitle,
-  step,
-}: {
-  icon: ReactNode;
-  label: string;
-  title: string;
-  subtitle: string;
-  step: string;
-}) {
+function PanelHeader({ title, step }: { title: string; step: string }) {
   return (
     <div className={PANEL_HEADER_CLASS}>
-      <div className="flex min-w-0 items-start gap-3">
-        <span className="dashboard-icon-chip shrink-0">{icon}</span>
-        <div className="min-w-0">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</p>
-          <p className="mt-1 font-heading text-xl font-bold text-slate-950">{title}</p>
-          <p className="mt-1 truncate text-sm text-slate-500">{subtitle}</p>
-        </div>
-      </div>
-      <span className={STEP_BADGE_CLASS}>{step}</span>
+      <p className="text-[13px] font-semibold text-[var(--ink)]">{title}</p>
+      <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--ink3)]">{step}</span>
     </div>
   );
 }
 
-function StatCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="dashboard-status-card rounded-[1.35rem] px-4 py-4">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</p>
-      <p className="mt-2 font-heading text-lg font-bold leading-6 text-slate-950">{value}</p>
-    </div>
-  );
-}
-
-function FieldHeading({ label, title }: { label: string; title: string }) {
-  return (
-    <div className="space-y-1">
-      <p className={FIELD_LABEL_CLASS}>{label}</p>
-      <p className="font-heading text-lg font-bold text-slate-950">{title}</p>
-    </div>
-  );
-}
-
-function InlineStatusChip({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/90 px-3 py-1.5 text-xs text-slate-600 shadow-[0_8px_18px_rgba(15,23,42,0.05)]">
-      <span className="font-semibold uppercase tracking-[0.18em] text-slate-400">{label}</span>
-      <span className="font-semibold text-slate-900">{value}</span>
-    </div>
-  );
-}
-
-function ModeCard({
-  title,
-  description,
-  active,
-  icon,
-  onClick,
-}: {
-  title: string;
-  description: string;
-  active: boolean;
-  icon: ReactNode;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cx(
-        "dashboard-subpanel flex min-h-[8.5rem] flex-col rounded-[1.35rem] p-4 text-left transition",
-        active
-          ? "border-[color:var(--border-strong)] bg-[linear-gradient(180deg,rgba(255,240,232,0.96),rgba(255,248,243,0.98))] ring-2 ring-[color:var(--accent-ring)]"
-          : "hover:border-[color:var(--border-strong)] hover:bg-white",
-      )}
-    >
-      <div className="flex items-center justify-between gap-3">
-        <span
-          className={cx(
-            "dashboard-icon-chip h-10 w-10 rounded-[0.95rem]",
-            active ? "bg-white text-[color:var(--accent)]" : "bg-slate-100 text-slate-500",
-          )}
-        >
-          {icon}
-        </span>
-        <span
-          className={cx(
-            "h-2.5 w-2.5 rounded-full transition",
-            active ? "bg-[color:var(--accent)] shadow-[0_0_0_5px_rgba(201,76,22,0.12)]" : "bg-slate-200",
-          )}
-        />
-      </div>
-      <p className="mt-4 font-heading text-lg font-bold text-slate-950">{title}</p>
-      <p className="mt-1 text-xs leading-6 text-slate-500">{description}</p>
-    </button>
-  );
-}
-
-function OptionCard({
-  active,
-  title,
-  description,
-  disabled = false,
-  onClick,
-}: {
-  active: boolean;
-  title: string;
-  description: string;
-  disabled?: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      disabled={disabled}
-      onClick={onClick}
-      className={cx(
-        "dashboard-subpanel flex flex-col justify-start rounded-[1rem] px-3 py-2.25 text-left transition disabled:cursor-not-allowed",
-        disabled && "border-slate-200/70 bg-slate-50 text-slate-400 opacity-55",
-        active
-          ? "border-[color:var(--border-strong)] bg-[linear-gradient(180deg,rgba(255,241,233,0.98),rgba(255,249,245,1))] ring-2 ring-[color:var(--accent-ring)]"
-          : "hover:border-[color:var(--border-strong)] hover:bg-white",
-      )}
-    >
-      <div className="flex min-h-[1.5rem] items-start">
-        <p
-          className={cx(
-            "overflow-hidden text-ellipsis whitespace-nowrap font-heading text-[0.92rem] font-bold leading-[1.05] sm:text-[0.98rem]",
-            disabled ? "text-slate-400" : "text-slate-950",
-          )}
-          title={title}
-        >
-          {title}
-        </p>
-      </div>
-      <p
-        className={cx(
-          "mt-0.75 overflow-hidden text-[10.5px] leading-[1.45] sm:text-[11px]",
-          disabled ? "text-slate-400" : "text-slate-500",
-        )}
-        style={{
-          display: "-webkit-box",
-          WebkitBoxOrient: "vertical",
-          WebkitLineClamp: 2,
-        }}
-        title={description}
-      >
-        {description}
-      </p>
-    </button>
-  );
-}
-
-function ModelCardTitle({
-  title,
-  active,
-}: {
-  title: string;
-  active: boolean;
-}) {
-  const shouldScroll = title.length >= 14;
-
-  return (
-    <div className={cx("dashboard-marquee", shouldScroll && "dashboard-marquee--ready")}>
-      <span
-        className={cx(
-          "dashboard-marquee-track",
-        )}
-        aria-label={title}
-      >
-        <span
-          className={cx(
-            "dashboard-marquee-text font-heading text-base font-bold leading-7 sm:text-[1.35rem] sm:leading-[1.2]",
-            active ? "text-white" : "text-slate-950",
-          )}
-        >
-          {title}
-        </span>
-        {shouldScroll ? (
-          <span
-            aria-hidden
-            className={cx(
-              "dashboard-marquee-text font-heading text-base font-bold leading-7 sm:text-[1.35rem] sm:leading-[1.2]",
-              active ? "text-white" : "text-slate-950",
-            )}
-          >
-            {title}
-          </span>
-        ) : null}
-      </span>
-    </div>
-  );
-}
-
-function PresetCard({
-  active,
-  title,
-  description,
-  iconTone,
-  onClick,
-}: {
-  active: boolean;
-  title: string;
-  description: string;
-  iconTone: number;
-  onClick: () => void;
-}) {
-  const tones = [
-    "bg-sky-100 text-sky-700",
-    "bg-emerald-100 text-emerald-700",
-    "bg-orange-100 text-orange-700",
-  ];
-
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cx(
-        "dashboard-subpanel rounded-[1.2rem] px-3 py-3 text-left transition",
-        active
-          ? "border-[color:var(--border-strong)] bg-[linear-gradient(180deg,rgba(255,241,233,0.98),rgba(255,249,245,1))] ring-2 ring-[color:var(--accent-ring)]"
-          : "hover:border-[color:var(--border-strong)] hover:bg-white",
-      )}
-    >
-      <div className="flex items-start gap-3">
-        <span
-          className={cx(
-            "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-[0.9rem] text-sm font-bold",
-            tones[iconTone % tones.length],
-          )}
-        >
-          {title.slice(0, 1)}
-        </span>
-        <div className="min-w-0">
-          <p className="font-heading text-base font-bold text-slate-950">{title}</p>
-          <p className="mt-1.5 text-xs leading-5 text-slate-500">{description}</p>
-        </div>
-      </div>
-    </button>
-  );
-}
-
-function ModelFamilyCard({
-  active,
-  title,
-  description,
-  priceLabel,
-  onClick,
-}: {
-  active: boolean;
-  title: string;
-  description: string;
-  priceLabel: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cx(
-        "dashboard-model-card rounded-[1.2rem] border px-3 py-3 text-left transition",
-        active
-          ? "border-slate-900 bg-[linear-gradient(180deg,#23272f,#12151b)] text-white shadow-[0_16px_28px_rgba(15,23,42,0.14)]"
-          : "dashboard-subpanel hover:border-slate-300 hover:bg-white",
-      )}
-    >
-      <div className="flex items-start justify-between gap-2.5">
-        <div className="min-w-0">
-          <ModelCardTitle title={title} active={active} />
-          <p
-            className={cx("mt-1.5 overflow-hidden text-xs leading-5", active ? "text-slate-200" : "text-slate-500")}
-            style={{
-              display: "-webkit-box",
-              WebkitBoxOrient: "vertical",
-              WebkitLineClamp: 2,
-            }}
-            title={description}
-          >
-            {description}
-          </p>
-        </div>
-        <span
-          className={cx(
-            "rounded-full px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap",
-            active ? "bg-white/10 text-white" : "bg-[var(--accent-soft)] text-[color:var(--accent)]",
-          )}
-        >
-          {priceLabel}
-        </span>
-      </div>
-    </button>
-  );
-}
 
 const RETRY_DELAYS = [2000, 4000, 8000];
 
 function PreviewCard({
-  eyebrow,
   title,
   subtitle,
   imageUrl,
   aspectRatio,
   emptyState,
-  badge,
   accent = false,
   onOpenImage,
 }: {
-  eyebrow: string;
   title: string;
   subtitle: string;
   imageUrl: string;
   aspectRatio: string;
   emptyState: string;
-  badge: string;
   accent?: boolean;
   onOpenImage: () => void;
 }) {
   const [attempt, setAttempt] = useState(0);
   const [retrying, setRetrying] = useState(false);
+  const [useProxy, setUseProxy] = useState(false);
   const [failed, setFailed] = useState(false);
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -1671,6 +1486,8 @@ function PreviewCard({
         setAttempt((n) => n + 1);
         setRetrying(false);
       }, RETRY_DELAYS[attempt]);
+    } else if (!useProxy) {
+      setUseProxy(true);
     } else {
       setFailed(true);
     }
@@ -1679,77 +1496,62 @@ function PreviewCard({
   return (
     <article
       className={cx(
-        "overflow-hidden rounded-[1.55rem] border bg-white shadow-[0_16px_35px_rgba(15,23,42,0.06)]",
-        accent ? "border-orange-200" : "border-slate-200",
+        "overflow-hidden rounded-md border bg-[var(--panel)]",
+        accent ? "border-[color:var(--accent-soft)]" : "border-[var(--border)]",
       )}
     >
-      <div className="border-b border-slate-200 px-4 py-3">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">{eyebrow}</p>
-        <div className="mt-1 flex items-center justify-between gap-3">
-          <div>
-            <p className="font-heading text-lg font-bold text-slate-950">{title}</p>
-            <p className="text-xs text-slate-500">{subtitle}</p>
-          </div>
-          {badge ? (
-            <span
-              className={cx(
-                "rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em]",
-                accent
-                  ? "bg-[color:var(--accent)] text-white"
-                  : "bg-slate-100 text-slate-600",
-              )}
-            >
-              {badge}
-            </span>
-          ) : null}
+      <div className="flex items-center justify-between border-b border-[var(--border)] px-3 py-2">
+        <div>
+          <p className="text-[12px] font-semibold text-[var(--ink)]">{title}</p>
+          <p className="text-[10.5px] text-[var(--ink3)]">{subtitle}</p>
         </div>
+        {accent && imageUrl ? (
+          <span className="rounded border border-[color:var(--accent-soft)] bg-[var(--accent-soft)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-[color:var(--accent-strong)]">
+            已生成
+          </span>
+        ) : null}
       </div>
 
       <div className={cx(accent ? "dashboard-preview-surface-accent" : "dashboard-preview-surface")} style={{ aspectRatio }}>
         {imageUrl ? (
           failed ? (
-            <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
-              <p className="text-sm text-slate-500">图片加载失败</p>
+            <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-center">
+              <p className="text-xs text-[var(--ink3)]">图片加载失败</p>
               <a
                 href={imageUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="rounded-full bg-[var(--accent-soft)] px-4 py-1.5 text-xs font-semibold text-[color:var(--accent)] transition hover:opacity-80"
+                className="rounded bg-[var(--accent-soft)] px-3 py-1 text-[11px] font-semibold text-[color:var(--accent)] transition hover:opacity-80"
               >
                 在新标签页打开
               </a>
             </div>
           ) : retrying ? (
-            <div className="flex h-full items-center justify-center p-6 text-center">
-              <p className="text-xs text-slate-400">图片加载中，第 {attempt + 1} 次重试…</p>
+            <div className="flex h-full items-center justify-center p-4 text-center">
+              <p className="text-[11px] text-[var(--muted)]">图片加载中，第 {attempt + 1} 次重试…</p>
             </div>
           ) : (
             <button
               type="button"
               onClick={onOpenImage}
-              className="group relative block h-full w-full cursor-zoom-in p-4"
+              className="group relative block h-full w-full cursor-zoom-in p-3"
               aria-label={`放大预览${title}`}
             >
               <img
-                key={attempt}
-                src={imageUrl}
+                key={`${attempt}-${useProxy}`}
+                src={useProxy ? buildProxyImageUrl(imageUrl) : imageUrl}
                 alt={title}
                 onError={handleImgError}
-                className={cx(
-                  "h-full w-full rounded-[1.35rem] object-contain",
-                  accent
-                    ? "shadow-[0_20px_48px_rgba(201,76,22,0.18)]"
-                    : "shadow-[0_18px_38px_rgba(15,23,42,0.1)]",
-                )}
+                className="h-full w-full rounded-sm object-contain"
               />
-              <div className="absolute inset-x-4 bottom-4 flex items-center justify-between rounded-[1.05rem] bg-white/86 px-3 py-2 text-xs text-slate-600 opacity-0 shadow-[0_12px_28px_rgba(15,23,42,0.08)] backdrop-blur-md transition group-hover:opacity-100">
-                <span className="font-semibold text-slate-900">{title}</span>
+              <div className="absolute inset-x-3 bottom-3 flex items-center justify-between rounded border border-[var(--border)] bg-[var(--panel)]/90 px-2.5 py-1.5 text-[11px] text-[var(--ink2)] opacity-0 backdrop-blur-sm transition group-hover:opacity-100">
+                <span className="font-medium text-[var(--ink)]">{title}</span>
                 <span>点击放大对比</span>
               </div>
             </button>
           )
         ) : (
-          <div className="flex h-full items-center justify-center p-6 text-center text-sm leading-7 text-slate-500">
+          <div className="flex h-full items-center justify-center p-5 text-center text-[12px] leading-[1.6] text-[var(--ink3)]">
             {emptyState}
           </div>
         )}
@@ -1772,23 +1574,23 @@ function ComparisonPreviewCard({
   emptyState: string;
 }) {
   return (
-    <article className="overflow-hidden rounded-[1.6rem] border border-white/10 bg-white/5 backdrop-blur-sm">
-      <div className="border-b border-white/10 px-4 py-3">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">{subtitle}</p>
-        <p className="mt-1 text-lg font-bold text-white">{title}</p>
+    <article className="overflow-hidden rounded-lg border border-white/10 bg-white/5">
+      <div className="border-b border-white/10 px-3 py-2.5">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">{subtitle}</p>
+        <p className="mt-0.5 text-[15px] font-bold text-white">{title}</p>
       </div>
       <div
-        className="flex items-center justify-center bg-[linear-gradient(135deg,rgba(255,255,255,0.05),rgba(255,255,255,0.02))] p-4"
+        className="flex items-center justify-center bg-white/[0.03] p-4"
         style={{ aspectRatio }}
       >
         {imageUrl ? (
           <img
             src={imageUrl}
             alt={title}
-            className="max-h-full w-auto max-w-full rounded-[1.2rem] object-contain shadow-[0_18px_60px_rgba(0,0,0,0.35)]"
+            className="max-h-full w-auto max-w-full rounded object-contain shadow-[0_18px_60px_rgba(0,0,0,0.35)]"
           />
         ) : (
-          <div className="flex h-full w-full items-center justify-center text-center text-sm leading-7 text-slate-300">
+          <div className="flex h-full w-full items-center justify-center text-center text-[12px] leading-[1.6] text-slate-400">
             {emptyState}
           </div>
         )}
@@ -1797,34 +1599,6 @@ function ComparisonPreviewCard({
   );
 }
 
-function SourceIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-5 w-5">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M3 7.5h6l1.8 2.4H21v7.8A1.8 1.8 0 0 1 19.2 19.5H4.8A1.8 1.8 0 0 1 3 17.7V7.5Z" />
-      <path strokeLinecap="round" strokeLinejoin="round" d="M8 14h8" />
-    </svg>
-  );
-}
-
-function ConfigureIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-5 w-5">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M7 12h10M10 18h4" />
-      <circle cx="8" cy="6" r="2" fill="currentColor" stroke="none" />
-      <circle cx="16" cy="12" r="2" fill="currentColor" stroke="none" />
-      <circle cx="12" cy="18" r="2" fill="currentColor" stroke="none" />
-    </svg>
-  );
-}
-
-function PreviewPanelIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-5 w-5">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />
-      <circle cx="12" cy="12" r="3.2" />
-    </svg>
-  );
-}
 
 function UploadModeIcon() {
   return (
@@ -1845,34 +1619,42 @@ function LinkModeIcon() {
   );
 }
 
-function ImageStackIcon() {
+
+function SpinnerIcon() {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-5 w-5">
-      <rect x="4" y="6" width="16" height="12" rx="2" />
-      <path strokeLinecap="round" strokeLinejoin="round" d="m7.5 14.5 3.2-3.2 2.3 2.3 2.3-2.3 2.2 3.2" />
-      <circle cx="9" cy="10" r="1.2" fill="currentColor" stroke="none" />
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" className="h-4 w-4 animate-spin">
+      <path strokeLinecap="round" d="M12 3a9 9 0 1 0 9 9" />
     </svg>
   );
 }
 
-function SparkIcon() {
+function SwapIcon() {
   return (
-    <svg viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5">
-      <path d="M12 2.5 13.9 8l5.6 1.9-5.6 1.9L12 17.5l-1.9-5.7L4.5 9.9 10.1 8 12 2.5Zm6 11 1 2.8 2.8 1-2.8 1-1 2.7-1-2.7-2.7-1 2.7-1 1-2.8Z" />
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-3.5 w-3.5">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3 7h14l-3-3m3 3-3 3" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M21 17H7l3-3m-3 3 3 3" />
     </svg>
   );
 }
 
-function MagicWandIcon() {
+function CopyIcon() {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" className="h-4.5 w-4.5 shrink-0">
-      <path strokeLinecap="round" strokeLinejoin="round" d="m4 20 8.7-8.7" />
-      <path strokeLinecap="round" strokeLinejoin="round" d="m11.5 5.5 1-2.5 1 2.5 2.5 1-2.5 1-1 2.5-1-2.5-2.5-1 2.5-1Z" />
-      <path strokeLinecap="round" strokeLinejoin="round" d="m17.5 12.5.7-1.7.7 1.7 1.7.7-1.7.7-.7 1.7-.7-1.7-1.7-.7 1.7-.7Z" />
-      <path strokeLinecap="round" strokeLinejoin="round" d="m14.2 9.8 2 2-7.6 7.6a1.4 1.4 0 0 1-2 0l-.4-.4a1.4 1.4 0 0 1 0-2l7.6-7.6Z" />
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-3.5 w-3.5">
+      <rect x="8" y="8" width="12" height="12" rx="2" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M16 4H6a2 2 0 0 0-2 2v10" />
     </svg>
   );
 }
+
+function DownloadIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-3.5 w-3.5">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v12m0 0 4-4m-4 4-4-4" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M4 18v2h16v-2" />
+    </svg>
+  );
+}
+
 
 function GearIcon() {
   return (

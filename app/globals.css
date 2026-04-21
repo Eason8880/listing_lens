@@ -1,23 +1,29 @@
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Manrope:wght@500;600;700;800&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap");
 @import "tailwindcss";
 
 :root {
-  --background: #f4f6f8;
-  --foreground: #171a1f;
-  --panel: rgba(255, 255, 255, 0.94);
-  --panel-soft: #f7f8fa;
-  --panel-muted: #eef2f5;
-  --border: rgba(23, 26, 31, 0.08);
-  --border-strong: rgba(201, 76, 22, 0.18);
-  --accent: #c84c17;
-  --accent-strong: #aa3600;
-  --accent-soft: #fff0e8;
+  --background: oklch(0.985 0.005 80);
+  --foreground: oklch(0.22 0.01 80);
+  --panel: #ffffff;
+  --panel-soft: oklch(0.97 0.005 80);
+  --panel-muted: oklch(0.94 0.005 80);
+  --border: oklch(0.92 0.004 80);
+  --border-strong: rgba(201, 76, 22, 0.35);
+  --accent: oklch(0.62 0.14 45);
+  --accent-strong: oklch(0.45 0.14 45);
+  --accent-soft: oklch(0.96 0.025 55);
   --accent-ring: rgba(201, 76, 22, 0.18);
-  --muted: #667085;
-  --shadow: 0 24px 60px rgba(15, 23, 42, 0.08);
-  --shadow-soft: 0 12px 32px rgba(15, 23, 42, 0.05);
+  --ink: oklch(0.22 0.01 80);
+  --ink2: oklch(0.38 0.01 80);
+  --ink3: oklch(0.55 0.008 80);
+  --muted: oklch(0.7 0.006 80);
+  --line-soft: oklch(0.95 0.004 80);
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 4px 12px rgba(0, 0, 0, 0.03);
+  --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.03);
   --font-body: "Inter";
-  --font-heading: "Manrope";
+  --font-heading: "Inter";
+  --font-serif: "Instrument Serif";
+  --font-mono: "JetBrains Mono";
 }
 
 * {
@@ -38,18 +44,17 @@ body {
     "Hiragino Sans GB",
     "Microsoft YaHei",
     sans-serif;
-  background:
-    radial-gradient(circle at top left, rgba(255, 141, 82, 0.16), transparent 24%),
-    radial-gradient(circle at top right, rgba(84, 191, 239, 0.1), transparent 26%),
-    linear-gradient(180deg, #f7f8fb 0%, #eef2f6 100%);
+  background: var(--background);
 }
 
 ::selection {
-  background: rgba(201, 76, 22, 0.18);
+  background: var(--accent-ring);
 }
 
-a {
-  color: inherit;
+@layer base {
+  a {
+    color: inherit;
+  }
 }
 
 button,
@@ -63,222 +68,97 @@ h1,
 h2,
 h3,
 h4,
-.font-heading,
-.dashboard-brand {
+.font-heading {
   font-family:
-    var(--font-heading),
     var(--font-body),
     "PingFang SC",
     sans-serif;
 }
 
-.dashboard-body {
+.font-serif {
   font-family:
-    var(--font-body),
-    "PingFang SC",
-    "Hiragino Sans GB",
-    "Microsoft YaHei",
-    sans-serif;
+    var(--font-serif),
+    "Iowan Old Style",
+    Georgia,
+    serif;
+}
+
+.font-mono-code {
+  font-family:
+    var(--font-mono),
+    ui-monospace,
+    "SF Mono",
+    Menlo,
+    monospace;
 }
 
 @layer components {
   .dashboard-panel {
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(249, 250, 251, 0.94));
+    background: var(--panel);
     border: 1px solid var(--border);
     box-shadow: var(--shadow);
-    backdrop-filter: blur(18px);
-  }
-
-  .dashboard-panel-soft {
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(245, 247, 250, 0.98));
-    border: 1px solid rgba(23, 26, 31, 0.07);
-    box-shadow: var(--shadow-soft);
-  }
-
-  .dashboard-hero-panel {
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(247, 249, 252, 0.92));
-    border: 1px solid rgba(23, 26, 31, 0.07);
-    box-shadow: var(--shadow);
-    backdrop-filter: blur(16px);
   }
 
   .dashboard-panel-header {
-    border-bottom: 1px solid rgba(23, 26, 31, 0.06);
-    background:
-      radial-gradient(circle at top right, rgba(201, 76, 22, 0.08), transparent 34%),
-      linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(250, 251, 252, 0.92));
-  }
-
-  .dashboard-step-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    white-space: nowrap;
-    border-radius: 999px;
-    border: 1px solid rgba(23, 26, 31, 0.08);
-    background: rgba(255, 255, 255, 0.92);
-    padding: 0.45rem 0.8rem;
-    font-size: 0.72rem;
-    font-weight: 700;
-    color: #4b5563;
-    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
-  }
-
-  .dashboard-step-badge::before {
-    height: 0.45rem;
-    width: 0.45rem;
-    border-radius: 999px;
-    background: var(--accent);
-    content: "";
-  }
-
-  .dashboard-subpanel {
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(246, 248, 250, 0.96));
-    border: 1px solid rgba(23, 26, 31, 0.07);
-    box-shadow: var(--shadow-soft);
-  }
-
-  .dashboard-icon-chip {
-    display: inline-flex;
-    height: 2.6rem;
-    width: 2.6rem;
-    align-items: center;
-    justify-content: center;
-    border-radius: 1rem;
-    background: var(--accent-soft);
-    color: var(--accent);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.82);
-  }
-
-  .dashboard-status-card {
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(249, 250, 252, 0.94));
-    border: 1px solid rgba(23, 26, 31, 0.06);
-    box-shadow: var(--shadow-soft);
-  }
-
-  .dashboard-marquee {
-    width: 100%;
-    overflow: hidden;
-  }
-
-  .dashboard-marquee-track {
-    display: inline-flex;
-    width: max-content;
-    max-width: none;
-    align-items: center;
-    white-space: nowrap;
-    will-change: transform;
-  }
-
-  .dashboard-marquee-text {
-    display: block;
-    flex: none;
-    white-space: nowrap;
-  }
-
-  .dashboard-marquee--ready .dashboard-marquee-track {
-    gap: 1rem;
-  }
-
-  .dashboard-marquee--ready {
-    mask-image: linear-gradient(90deg, transparent 0, #000 0.6rem, #000 calc(100% - 0.6rem), transparent 100%);
-  }
-
-  @keyframes dashboard-marquee-scroll {
-    0%,
-    12% {
-      transform: translateX(0);
-    }
-
-    88%,
-    100% {
-      transform: translateX(calc(-50% - 0.5rem));
-    }
-  }
-
-  @media (hover: hover) and (pointer: fine) {
-    .dashboard-model-card:hover .dashboard-marquee--ready .dashboard-marquee-track,
-    .dashboard-model-card:focus-visible .dashboard-marquee--ready .dashboard-marquee-track {
-      animation: dashboard-marquee-scroll 6.8s linear infinite;
-    }
-  }
-
-  .dashboard-primary-button {
-    border-radius: 1rem;
-    background: linear-gradient(135deg, var(--accent) 0%, var(--accent-strong) 100%);
-    color: white;
-    box-shadow: 0 14px 28px rgba(201, 76, 22, 0.24);
-    transition:
-      transform 0.18s ease,
-      box-shadow 0.18s ease,
-      opacity 0.18s ease;
-  }
-
-  .dashboard-primary-button:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 18px 34px rgba(201, 76, 22, 0.28);
+    border-bottom: 1px solid var(--border);
+    background: var(--panel-soft);
   }
 
   .dashboard-secondary-button {
-    border-radius: 1rem;
-    border: 1px solid rgba(23, 26, 31, 0.1);
-    background: rgba(255, 255, 255, 0.94);
-    color: #1f2937;
-    box-shadow: var(--shadow-soft);
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--ink2);
     transition:
-      border-color 0.18s ease,
-      background 0.18s ease,
-      color 0.18s ease;
+      border-color 0.15s ease,
+      background 0.15s ease,
+      color 0.15s ease;
   }
 
   .dashboard-secondary-button:hover {
-    border-color: rgba(23, 26, 31, 0.16);
+    border-color: oklch(0.82 0.004 80);
     background: white;
+    color: var(--ink);
   }
 
   .dashboard-dark-button {
-    border-radius: 1rem;
-    background: linear-gradient(180deg, #1a1d22 0%, #101318 100%);
+    border-radius: 8px;
+    background: var(--ink);
     color: white;
-    box-shadow: 0 18px 35px rgba(15, 23, 42, 0.18);
     transition:
-      transform 0.18s ease,
-      box-shadow 0.18s ease,
-      opacity 0.18s ease;
+      opacity 0.15s ease,
+      background 0.15s ease;
   }
 
   .dashboard-dark-button:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 22px 40px rgba(15, 23, 42, 0.22);
+    background: oklch(0.28 0.01 80);
   }
 
   .dashboard-url-bar {
-    border-radius: 1.1rem;
-    background: linear-gradient(180deg, #171a20 0%, #101319 100%);
-    color: #edf2f7;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
+    border-radius: 6px;
+    background: oklch(0.15 0.01 80);
+    color: oklch(0.85 0.004 80);
+    font-family: var(--font-mono), ui-monospace, monospace;
+    font-size: 11px;
+    word-break: break-all;
   }
 
   .dashboard-preview-surface {
-    background:
-      radial-gradient(circle at top, rgba(255, 255, 255, 0.72), transparent 52%),
-      linear-gradient(180deg, #eef2f5 0%, #e2e7ed 100%);
+    background: var(--panel-soft);
   }
 
   .dashboard-preview-surface-accent {
-    background:
-      radial-gradient(circle at top, rgba(255, 255, 255, 0.68), transparent 46%),
-      linear-gradient(180deg, rgba(255, 244, 238, 0.98) 0%, rgba(244, 236, 231, 0.96) 100%);
+    background: oklch(0.97 0.015 55);
   }
 
   .scrollbar-soft {
     scrollbar-width: thin;
-    scrollbar-color: rgba(148, 163, 184, 0.55) transparent;
+    scrollbar-color: oklch(0.8 0.004 80) transparent;
   }
 
   .scrollbar-soft::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
+    width: 6px;
+    height: 6px;
   }
 
   .scrollbar-soft::-webkit-scrollbar-track {
@@ -287,19 +167,9 @@ h4,
 
   .scrollbar-soft::-webkit-scrollbar-thumb {
     border-radius: 999px;
-    background: linear-gradient(180deg, rgba(148, 163, 184, 0.7), rgba(100, 116, 139, 0.7));
-    border: 2px solid transparent;
+    background: oklch(0.82 0.004 80);
+    border: 1px solid transparent;
     background-clip: padding-box;
-  }
-
-  .scrollbar-soft-hide {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
-  }
-
-  .scrollbar-soft-hide::-webkit-scrollbar {
-    width: 0;
-    height: 0;
   }
 
   @media (hover: hover) and (pointer: fine) {
