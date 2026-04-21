@@ -48,7 +48,7 @@ test("requestImageGeneration retries Nano Banana once after a transient fetch fa
   assert.equal(requestBody.get("aspect_ratio"), "1:1");
 });
 
-test("requestImageGeneration does not retry non-Nano Banana network failures", async () => {
+test("requestImageGeneration retries transient network failures and returns the localized network message", async () => {
   let callCount = 0;
 
   await assert.rejects(
@@ -65,8 +65,8 @@ test("requestImageGeneration does not retry non-Nano Banana network failures", a
           throw new TypeError("Failed to fetch");
         },
       }),
-    /Failed to fetch/,
+    /网络请求失败，请检查网络连接后重试/,
   );
 
-  assert.equal(callCount, 1);
+  assert.equal(callCount, 4);
 });

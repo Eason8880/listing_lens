@@ -116,8 +116,28 @@ function isRetriableNetworkError(error: unknown) {
   return error instanceof TypeError && /Failed to fetch|fetch failed/i.test(error.message);
 }
 
-function shouldRetryAttempt(attempt: GenerationAttempt, error: unknown) {
-  return attempt.familyId === "nano-banana" && isRetriableNetworkError(error);
+function isGeminiSafetyError(payload: ImageApiPayload) {
+  const msg = getImageGenerationErrorMessage(payload).toLowerCase();
+  return msg.includes("gemini could not generate") || msg.includes("image safety");
+}
+
+const MAX_NETWORK_RETRIES = 3;
+const NETWORK_RETRY_DELAYS_MS = [0, 800, 1500];
+
+function delay(ms: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, ms));
+}
+
+function shouldRetryAttempt(error: unknown) {
+  return isRetriableNetworkError(error);
+}
+
+function shouldRetryResponse(attempt: GenerationAttempt, payload: ImageApiPayload) {
+  const isGeminiFamily =
+    attempt.familyId === "gemini-flash" ||
+    attempt.familyId === "nano-banana-pro" ||
+    attempt.familyId === "gemini-pro-preview";
+  return isGeminiFamily && isGeminiSafetyError(payload);
 }
 
 export async function requestImageGeneration({
@@ -139,7 +159,7 @@ export async function requestImageGeneration({
   let lastErrorMessage = DEFAULT_ERROR_MESSAGE;
 
   for (const attempt of attempts) {
-    for (let retryCount = 0; retryCount < 2; retryCount += 1) {
+    for (let retryCount = 0; retryCount <= MAX_NETWORK_RETRIES; retryCount += 1) {
       try {
         const response = await executeGenerationAttempt({
           apiKey,
@@ -157,6 +177,9 @@ export async function requestImageGeneration({
 
         if (!response.ok) {
           lastErrorMessage = getImageGenerationErrorMessage(payload);
+          if (retryCount === 0 && shouldRetryResponse(attempt, payload)) {
+            continue;
+          }
           break;
         }
 
@@ -167,12 +190,15 @@ export async function requestImageGeneration({
           requestedModel,
         };
       } catch (error) {
-        if (retryCount === 0 && shouldRetryAttempt(attempt, error)) {
+        if (retryCount < MAX_NETWORK_RETRIES && shouldRetryAttempt(error)) {
+          const ms = NETWORK_RETRY_DELAYS_MS[retryCount] ?? 0;
+          if (ms > 0) await delay(ms);
           continue;
         }
 
-        lastErrorMessage =
-          error instanceof Error && error.message.trim()
+        lastErrorMessage = isRetriableNetworkError(error)
+          ? "网络请求失败，请检查网络连接后重试。"
+          : error instanceof Error && error.message.trim()
             ? error.message
             : DEFAULT_ERROR_MESSAGE;
         break;

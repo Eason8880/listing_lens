@@ -91,6 +91,11 @@ export interface GenerateImageRequest {
   image?: File;
 }
 
+export interface SellingPointItem {
+  target: string;
+  zh: string;
+}
+
 export interface GenerateImageResponse {
   imageUrl: string;
   copyableImageUrl?: string;
@@ -106,4 +111,5 @@ export interface GenerateImageResponse {
   usedFallback: boolean;
   aspectRatioId: AspectRatioId;
   resolutionId: ResolutionId;
+  sellingPoints?: SellingPointItem[];
 }
