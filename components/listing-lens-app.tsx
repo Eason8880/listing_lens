@@ -37,6 +37,7 @@ import {
   type GenerationAttempt,
   type ImageApiPayload,
 } from "@/lib/image-generation";
+import { getModelFamilySelectionNotice } from "@/lib/model-family-notice";
 import { buildGenerationPrompt } from "@/lib/prompt";
 import { parseSellingPoints } from "@/lib/selling-points";
 import type {
@@ -271,7 +272,7 @@ export function ListingLensApp() {
       resolutionId: nextSelection.resolutionId,
       aspectRatioId: nextSelection.aspectRatioId,
     });
-    const notices = [nextSelection.message];
+    const notices = [nextSelection.message, getModelFamilySelectionNotice(nextModelFamilyId)];
 
     if (!nextCanExtractSellingPoints && extractSellingPoints) {
       notices.push("当前模型返回本地预览图片，不支持提炼图片卖点，已自动关闭该功能。");
