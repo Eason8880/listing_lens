@@ -107,6 +107,7 @@ export interface GenerateImageResponse {
   actualModelFamilyId: ModelFamilyId;
   actualModel: string;
   actualModelLabel: string;
+  actualSize?: string;
   actualPriceLabel: string;
   usedFallback: boolean;
   aspectRatioId: AspectRatioId;

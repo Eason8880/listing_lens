@@ -12,6 +12,14 @@ export const API_KEY_STORAGE_KEY = "listinglens.apiKey";
 
 export const MODEL_FAMILY_OPTIONS: ModelFamilyOption[] = [
   {
+    id: "gpt-image-1-5",
+    label: "OpenAI GPT 2",
+    priceLabel: "0.04 元/张",
+    description: "适合使用 OpenAI 原生编辑尺寸输出方图、竖图和横图。",
+    baseModel: "gpt-image-2",
+    requestStrategy: "edits-size",
+  },
+  {
     id: "gemini-flash",
     label: "Nano Banana 2",
     priceLabel: "0.1 元/张",
@@ -49,16 +57,6 @@ export const MODEL_FAMILY_OPTIONS: ModelFamilyOption[] = [
     description: "适合按明确尺寸输出并兼顾商品主体保真。",
     baseModel: "doubao-seedream-5-0-260128",
     requestStrategy: "generations-json-size",
-  },
-  {
-    id: "gpt-image-1-5",
-    label: "OpenAI GPT 1.5",
-    priceLabel: "0.05 元/张",
-    description: "适合使用 OpenAI 原生编辑尺寸输出方图、竖图和横图。",
-    baseModel: "gpt-image-1.5",
-    requestStrategy: "edits-size",
-    supportedAspectRatioIds: ["1:1", "2:3", "3:2"],
-    supportedResolutionIds: ["1k"],
   },
   {
     id: "gemini-pro-preview",

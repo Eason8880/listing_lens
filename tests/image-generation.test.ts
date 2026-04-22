@@ -30,6 +30,19 @@ test("all model family price labels use 元/张 wording", async () => {
   }
 });
 
+test("OpenAI GPT 2 is the first default model with the updated price", async () => {
+  const constantsModule = await import("@/lib/constants").catch(() => null);
+  assert.ok(constantsModule, "Expected @/lib/constants to exist.");
+
+  const { DEFAULT_MODEL_FAMILY_ID, MODEL_FAMILY_OPTIONS } = constantsModule;
+  const firstModelFamily = MODEL_FAMILY_OPTIONS[0];
+
+  assert.equal(firstModelFamily?.id, "gpt-image-1-5");
+  assert.equal(firstModelFamily?.label, "OpenAI GPT 2");
+  assert.equal(firstModelFamily?.priceLabel, "0.04 元/张");
+  assert.equal(DEFAULT_MODEL_FAMILY_ID, "gpt-image-1-5");
+});
+
 test("buildGenerationAttempts keeps Nano Banana Pro on its primary model without fallback", async () => {
   const { buildGenerationAttempts } = await requireImageGenerationModule();
 
@@ -84,6 +97,11 @@ test("buildGenerationAttempts maps Doubao and GPT Image sizes from resolution an
     resolutionId: "1k",
     aspectRatioId: "2:3",
   })[0];
+  const gptWideAttempt = buildGenerationAttempts({
+    modelFamilyId: "gpt-image-1-5",
+    resolutionId: "4k",
+    aspectRatioId: "16:9",
+  })[0];
 
   assert.equal(nanoBananaAttempt.endpoint, "/v1/images/edits");
   assert.equal(nanoBananaAttempt.requestStrategy, "edits-model-name");
@@ -98,6 +116,7 @@ test("buildGenerationAttempts maps Doubao and GPT Image sizes from resolution an
   assert.equal(gptAttempt.requestStrategy, "edits-size");
   assert.equal(gptAttempt.size, "1024x1536");
   assert.equal(gptAttempt.responseFormat, "b64_json");
+  assert.equal(gptWideAttempt.size, "3840x2160");
 
   const nanoBananaDisplayAttempt = getModelFamilyDisplayAttempt({
     modelFamilyId: "nano-banana",
@@ -128,8 +147,16 @@ test("buildGenerationAttempts maps Doubao and GPT Image sizes from resolution an
   );
 
   assert.deepEqual(getSupportedResolutionIds("nano-banana"), ["1k", "2k"]);
-  assert.deepEqual(getSupportedResolutionIds("gpt-image-1-5"), ["1k"]);
-  assert.deepEqual(getSupportedAspectRatioIds("gpt-image-1-5"), ["1:1", "2:3", "3:2"]);
+  assert.deepEqual(getSupportedResolutionIds("gpt-image-1-5"), ["1k", "2k", "4k"]);
+  assert.deepEqual(getSupportedAspectRatioIds("gpt-image-1-5"), [
+    "1:1",
+    "4:5",
+    "3:4",
+    "2:3",
+    "4:3",
+    "3:2",
+    "16:9",
+  ]);
 });
 
 test("buildGenerationAttempts no longer supports Gemini 2.5 Flash", async () => {
@@ -177,6 +204,7 @@ test("normalizeGeneratedImageResult keeps external URLs copyable", async () => {
   assert.equal(result.deliveryKind, "external-url");
   assert.equal(result.actualModelFamilyId, "gemini-flash");
   assert.equal(result.actualModelLabel, "Nano Banana 2");
+  assert.equal(result.actualSize, undefined);
   assert.equal(result.usedFallback, false);
   assert.equal(result.revisedPrompt, "keep the product centered");
 });
@@ -198,7 +226,7 @@ test("normalizeGeneratedImageResult converts b64_json payloads into local-only p
     attempt,
     createObjectUrl: () => "blob://generated-preview",
     requestedModelFamilyId: "gpt-image-1-5",
-    requestedModel: "gpt-image-1.5",
+    requestedModel: "gpt-image-2",
     aspectRatioId: "1:1",
     resolutionId: "1k",
   });
@@ -207,8 +235,9 @@ test("normalizeGeneratedImageResult converts b64_json payloads into local-only p
   assert.equal(result.copyableImageUrl, undefined);
   assert.match(result.analysisImageUrl, /^data:image\/png;base64,QUJD$/);
   assert.equal(result.deliveryKind, "local-data");
-  assert.equal(result.actualModelLabel, "OpenAI GPT 1.5");
-  assert.equal(result.actualPriceLabel, "0.05 元/张");
+  assert.equal(result.actualModelLabel, "OpenAI GPT 2");
+  assert.equal(result.actualSize, "1024x1024");
+  assert.equal(result.actualPriceLabel, "0.04 元/张");
   assert.equal(result.usedFallback, false);
   assert.equal(result.revisedPrompt, "make the scene brighter");
 });
@@ -229,7 +258,7 @@ test("normalizeGeneratedImageResult tolerates data URL prefixes and whitespace i
     attempt,
     createObjectUrl: () => "blob://gpt-image-prefixed-preview",
     requestedModelFamilyId: "gpt-image-1-5",
-    requestedModel: "gpt-image-1.5",
+    requestedModel: "gpt-image-2",
     aspectRatioId: "1:1",
     resolutionId: "1k",
   });
@@ -240,7 +269,7 @@ test("normalizeGeneratedImageResult tolerates data URL prefixes and whitespace i
   assert.equal(result.deliveryKind, "local-data");
 });
 
-test("coerceGenerationSelection resets unsupported GPT Image options to native values", async () => {
+test("coerceGenerationSelection keeps supported GPT Image 2 options unchanged", async () => {
   const { coerceGenerationSelection } = await requireImageGenerationModule();
 
   const selection = coerceGenerationSelection({
@@ -249,13 +278,13 @@ test("coerceGenerationSelection resets unsupported GPT Image options to native v
     resolutionId: "4k",
   });
 
-  assert.equal(selection.aspectRatioId, "1:1");
-  assert.equal(selection.resolutionId, "1k");
-  assert.equal(selection.wasAdjusted, true);
-  assert.match(selection.message, /OpenAI GPT 1\.5/);
+  assert.equal(selection.aspectRatioId, "4:5");
+  assert.equal(selection.resolutionId, "4k");
+  assert.equal(selection.wasAdjusted, false);
+  assert.equal(selection.message, "");
 });
 
-test("supportsSellingPointExtraction only allows URL-returning models", async () => {
+test("supportsSellingPointExtraction allows GPT Image 2 local previews and URL-returning models", async () => {
   const { supportsSellingPointExtraction } = await requireImageGenerationModule();
 
   assert.equal(
@@ -273,7 +302,7 @@ test("supportsSellingPointExtraction only allows URL-returning models", async ()
       resolutionId: "1k",
       aspectRatioId: "1:1",
     }),
-    false,
+    true,
   );
 
   assert.equal(
@@ -282,6 +311,6 @@ test("supportsSellingPointExtraction only allows URL-returning models", async ()
       resolutionId: "1k",
       aspectRatioId: "2:3",
     }),
-    false,
+    true,
   );
 });

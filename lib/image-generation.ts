@@ -53,14 +53,34 @@ const RESOLUTION_LONG_EDGE: Record<ResolutionId, number> = {
   "2k": 2048,
   "4k": 4096,
 };
-const GPT_IMAGE_SIZE_MAP: Record<AspectRatioId, string | undefined> = {
-  "1:1": "1024x1024",
-  "4:5": undefined,
-  "3:4": undefined,
-  "2:3": "1024x1536",
-  "4:3": undefined,
-  "3:2": "1536x1024",
-  "16:9": undefined,
+const GPT_IMAGE_SIZE_MAP: Record<ResolutionId, Record<AspectRatioId, string>> = {
+  "1k": {
+    "1:1": "1024x1024",
+    "4:5": "1024x1280",
+    "3:4": "1152x1536",
+    "2:3": "1024x1536",
+    "4:3": "1024x768",
+    "3:2": "1536x1024",
+    "16:9": "1280x720",
+  },
+  "2k": {
+    "1:1": "2048x2048",
+    "4:5": "2048x2560",
+    "3:4": "1536x2048",
+    "2:3": "1344x2016",
+    "4:3": "2048x1536",
+    "3:2": "2016x1344",
+    "16:9": "2048x1152",
+  },
+  "4k": {
+    "1:1": "2880x2880",
+    "4:5": "2560x3200",
+    "3:4": "2448x3264",
+    "2:3": "2336x3504",
+    "4:3": "3264x2448",
+    "3:2": "3504x2336",
+    "16:9": "3840x2160",
+  },
 };
 
 function getModelFamilyOption(modelFamilyId: ModelFamilyId): ModelFamilyOption {
@@ -183,12 +203,6 @@ function buildAttempt(
         size: buildExplicitSize(aspectRatioId, resolutionId),
       };
     case "edits-size": {
-      const size = GPT_IMAGE_SIZE_MAP[aspectRatioId];
-
-      if (!size) {
-        throw new Error(`Aspect ratio ${aspectRatioId} is not supported for ${modelFamily.label}.`);
-      }
-
       return {
         familyId: modelFamily.id,
         familyLabel: modelFamily.label,
@@ -197,7 +211,7 @@ function buildAttempt(
         requestStrategy: modelFamily.requestStrategy,
         endpoint: "/v1/images/edits",
         responseFormat: "b64_json",
-        size,
+        size: GPT_IMAGE_SIZE_MAP[resolutionId][aspectRatioId],
       };
     }
     default:
@@ -285,11 +299,11 @@ export function supportsSellingPointExtraction({
   resolutionId: ResolutionId;
   aspectRatioId: AspectRatioId;
 }) {
-  return buildGenerationAttempts({
+  return Boolean(buildGenerationAttempts({
     modelFamilyId,
     resolutionId,
     aspectRatioId,
-  })[0]?.responseFormat === "url";
+  })[0]);
 }
 
 function getRevisedPrompt(payload: ImageApiPayload) {
@@ -406,6 +420,7 @@ export function normalizeGeneratedImageResult({
     actualModelFamilyId: attempt.familyId,
     actualModel: attempt.model,
     actualModelLabel: attempt.familyLabel,
+    actualSize: attempt.size,
     actualPriceLabel: attempt.priceLabel,
     usedFallback: requestedModelFamilyId !== attempt.familyId,
     aspectRatioId,

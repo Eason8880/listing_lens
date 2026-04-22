@@ -242,6 +242,8 @@ export function ListingLensApp() {
     MODEL_FAMILY_OPTIONS.find((item) => item.id === result?.requestedModelFamilyId) ??
     activeModelFamily;
   const resultModelLabel = result?.actualModelLabel ?? activeModelFamily.label;
+  const currentActualSize = primaryAttempt.size;
+  const resultActualSize = result?.actualSize;
   const canExtractSellingPoints = supportsSellingPointExtraction({
     modelFamilyId: activeModelFamily.id,
     resolutionId,
@@ -259,7 +261,9 @@ export function ListingLensApp() {
     sellingPointsFromResponse.length === 0;
   const showSellingPointsPanel =
     extractSellingPoints && Boolean(result?.imageUrl);
-  const costSummary = `预估 ${primaryAttempt.priceLabel} · ${activeResolution.label} · ${activeAspectRatio.id}`;
+  const costSummary = primaryAttempt.size
+    ? `预估 ${primaryAttempt.priceLabel} · 档位 ${activeResolution.label} · 实际 ${primaryAttempt.size} · ${activeAspectRatio.id}`
+    : `预估 ${primaryAttempt.priceLabel} · ${activeResolution.label} · ${activeAspectRatio.id}`;
 
   function handleModelFamilyChange(nextModelFamilyId: ModelFamilyId) {
     const nextSelection = coerceGenerationSelection({
@@ -273,10 +277,6 @@ export function ListingLensApp() {
       aspectRatioId: nextSelection.aspectRatioId,
     });
     const notices = [nextSelection.message, getModelFamilySelectionNotice(nextModelFamilyId)];
-
-    if (!nextCanExtractSellingPoints && extractSellingPoints) {
-      notices.push("当前模型返回本地预览图片，不支持提炼图片卖点，已自动关闭该功能。");
-    }
 
     setModelFamilyId(nextModelFamilyId);
     setAspectRatio(nextSelection.aspectRatioId);
@@ -943,6 +943,11 @@ export function ListingLensApp() {
                         );
                       })}
                     </div>
+                    {currentActualSize ? (
+                      <p className="mt-1.5 rounded border border-[var(--border)] bg-[var(--panel-soft)] px-3 py-1.5 text-[11px] text-[var(--ink2)]">
+                        当前组合实际传输尺寸：{currentActualSize}
+                      </p>
+                    ) : null}
                     {resolutionNotice ? (
                       <p className="mt-1.5 rounded border border-[color:var(--accent-soft)] bg-[var(--accent-soft)] px-3 py-1.5 text-[11px] text-[color:var(--accent-strong)]">{resolutionNotice}</p>
                     ) : null}
@@ -1144,6 +1149,7 @@ export function ListingLensApp() {
                       { label: "比例", value: resultAspectRatio.id },
                       { label: "分辨率", value: resultResolution.label },
                       { label: "模型", value: resultModelLabel },
+                      ...(resultActualSize ? [{ label: "实际尺寸", value: resultActualSize }] : []),
                     ].map(({ label, value }) => (
                       <span
                         key={label}
