@@ -178,6 +178,12 @@ export const ASPECT_RATIO_OPTIONS: AspectRatioOption[] = [
     description: "适合横幅、首屏和广告素材。",
     aspectRatio: "16 / 9",
   },
+  {
+    id: "9:16",
+    label: "9:16（高竖版）",
+    description: "适合短视频封面与竖版广告素材。",
+    aspectRatio: "9 / 16",
+  },
 ];
 
 export const DEFAULT_ASPECT_RATIO_ID = "1:1";

@@ -62,8 +62,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "画面比例参数无效。" }, { status: 400 });
     }
 
-    if (!(image instanceof File)) {
-      return NextResponse.json({ error: "缺少可用图片文件。" }, { status: 400 });
+    if (image !== null && !(image instanceof File)) {
+      return NextResponse.json({ error: "图片参数无效。" }, { status: 400 });
     }
 
     const generationResult = await requestImageGeneration({
@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
       modelFamilyId,
       resolutionId,
       aspectRatioId,
-      sourceFile: image,
+      sourceFile: image instanceof File ? image : undefined,
     });
 
     return NextResponse.json(generationResult, { status: 200 });

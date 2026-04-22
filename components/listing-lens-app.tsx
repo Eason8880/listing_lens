@@ -250,10 +250,7 @@ export function ListingLensApp() {
     aspectRatioId: aspectRatio,
   });
   const canGenerate =
-    apiKey.trim().length > 0 &&
-    targetLanguage.trim().length > 0 &&
-    ((uploadMode === "file" && Boolean(selectedFile)) ||
-      (uploadMode === "url" && Boolean(selectedImageUrl)));
+    Boolean(selectedFile) || Boolean(selectedImageUrl) || customPrompt.trim().length > 0;
   const sellingPointsFromResponse = result?.sellingPoints ?? sellingPointsResult;
   const isSellingPointsEmptyState =
     sellingPointsFromResponse !== undefined &&
@@ -305,7 +302,7 @@ export function ListingLensApp() {
     }
 
     if (!selectedImageUrl) {
-      throw new Error("请先从候选图里选择一张主图。");
+      return null;
     }
 
     let response: Response;
@@ -447,18 +444,13 @@ export function ListingLensApp() {
       return;
     }
 
-    if (!targetLanguage.trim()) {
+    if ((selectedFile || selectedImageUrl) && !targetLanguage.trim()) {
       setFormError("目标语言不能为空。");
       return;
     }
 
-    if (uploadMode === "file" && !selectedFile) {
-      setFormError("请先上传商品主图。");
-      return;
-    }
-
-    if (uploadMode === "url" && !selectedImageUrl) {
-      setFormError("请先从候选图里选择一张主图。");
+    if (!selectedFile && !selectedImageUrl && !customPrompt.trim()) {
+      setFormError("无图片时请至少填写补充说明。");
       return;
     }
 
@@ -476,6 +468,7 @@ export function ListingLensApp() {
         aspectRatio,
         presetId,
         customPrompt: customPrompt.trim() || undefined,
+        hasSourceImage: Boolean(sourceFile),
         extractSellingPoints,
         adjustProductAngle,
         matchBackgroundToProductInfo,
@@ -485,7 +478,9 @@ export function ListingLensApp() {
       body.append("modelFamilyId", activeModelFamily.id);
       body.append("resolutionId", resolutionId);
       body.append("aspectRatioId", aspectRatio);
-      body.append("image", sourceFile, sourceFile.name);
+      if (sourceFile) {
+        body.append("image", sourceFile, sourceFile.name);
+      }
 
       const response = await fetch("/api/generate-image", {
         method: "POST",
@@ -877,7 +872,7 @@ export function ListingLensApp() {
                   {/* Aspect ratio visual thumbnails */}
                   <div>
                     <p className={FIELD_LABEL_CLASS}>输出比例</p>
-                    <div className="grid grid-cols-7 gap-1">
+                    <div className="grid grid-cols-8 gap-1">
                       {visibleAspectRatioOptions.map((option) => {
                         const active = option.id === aspectRatio;
                         const [w, h] = option.aspectRatio.split(" / ").map(Number);

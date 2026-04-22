@@ -102,6 +102,11 @@ test("buildGenerationAttempts maps Doubao and GPT Image sizes from resolution an
     resolutionId: "4k",
     aspectRatioId: "16:9",
   })[0];
+  const gptTallAttempt = buildGenerationAttempts({
+    modelFamilyId: "gpt-image-1-5",
+    resolutionId: "2k",
+    aspectRatioId: "9:16",
+  })[0];
 
   assert.equal(nanoBananaAttempt.endpoint, "/v1/images/edits");
   assert.equal(nanoBananaAttempt.requestStrategy, "edits-model-name");
@@ -117,6 +122,7 @@ test("buildGenerationAttempts maps Doubao and GPT Image sizes from resolution an
   assert.equal(gptAttempt.size, "1024x1536");
   assert.equal(gptAttempt.responseFormat, "b64_json");
   assert.equal(gptWideAttempt.size, "3840x2160");
+  assert.equal(gptTallAttempt.size, "1152x2048");
 
   const nanoBananaDisplayAttempt = getModelFamilyDisplayAttempt({
     modelFamilyId: "nano-banana",
@@ -156,6 +162,7 @@ test("buildGenerationAttempts maps Doubao and GPT Image sizes from resolution an
     "4:3",
     "3:2",
     "16:9",
+    "9:16",
   ]);
 });
 

@@ -94,3 +94,19 @@ test("buildGenerationPrompt makes background matching a visible change when enab
   assert.match(prompt, /do not keep the same plain studio background or identical scene/i);
   assert.match(prompt, /background change takes priority over preserving the original background/i);
 });
+
+test("buildGenerationPrompt omits preset instructions when generating without a source image", () => {
+  const prompt = buildGenerationPrompt({
+    targetLanguage: "Deutsch",
+    aspectRatio: "1:1",
+    presetId: "localized-beauty",
+    customPrompt: "Create a premium waterproof lunch bag hero image with short headline text.",
+    hasSourceImage: false,
+  });
+
+  assert.match(prompt, /generating a brand-new cross-border ecommerce product hero image/i);
+  assert.match(prompt, /Create a premium waterproof lunch bag hero image/i);
+  assert.doesNotMatch(prompt, /premium ecommerce appeal/i);
+  assert.doesNotMatch(prompt, /Detect whether the image contains existing text/i);
+  assert.doesNotMatch(prompt, /Deutsch/i);
+});

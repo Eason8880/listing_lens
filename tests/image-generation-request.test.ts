@@ -70,3 +70,45 @@ test("requestImageGeneration retries transient network failures and returns the 
 
   assert.equal(callCount, 4);
 });
+
+test("requestImageGeneration sends text-only generations for GPT Image 2 when no source image is provided", async () => {
+  const calls: Array<{ url: string; init?: RequestInit }> = [];
+
+  const result = await requestImageGeneration({
+    apiKey: "test-key",
+    prompt: "Create a clean ecommerce hero image for a waterproof lunch bag.",
+    modelFamilyId: "gpt-image-1-5",
+    resolutionId: "2k",
+    aspectRatioId: "1:1",
+    fetchImpl: async (input, init) => {
+      calls.push({ url: String(input), init });
+
+      return new Response(
+        JSON.stringify({
+          data: [{ b64_json: "QUJD" }],
+        }),
+        {
+          status: 200,
+          headers: {
+            "Content-Type": "application/json",
+          },
+        },
+      );
+    },
+  });
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0]?.url, "https://api.bltcy.ai/v1/images/generations");
+  assert.equal(result.attempt.familyId, "gpt-image-1-5");
+  assert.equal(result.attempt.size, "2048x2048");
+
+  const requestBody = calls[0]?.init?.body;
+  assert.equal(typeof requestBody, "string");
+
+  const parsedBody = JSON.parse(requestBody as string) as Record<string, unknown>;
+
+  assert.equal(parsedBody.model, "gpt-image-2");
+  assert.equal(parsedBody.size, "2048x2048");
+  assert.equal(parsedBody.response_format, "b64_json");
+  assert.equal(parsedBody.image, undefined);
+});

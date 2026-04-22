@@ -20,6 +20,7 @@ export const ASPECT_RATIO_IDS = [
   "4:3",
   "3:2",
   "16:9",
+  "9:16",
 ] as const;
 
 export type ModelFamilyId = (typeof MODEL_FAMILY_IDS)[number];

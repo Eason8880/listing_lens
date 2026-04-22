@@ -8,6 +8,7 @@ interface BuildGenerationPromptInput {
   aspectRatio?: string;
   presetId: PromptPresetId;
   customPrompt?: string;
+  hasSourceImage?: boolean;
   extractSellingPoints?: boolean;
   adjustProductAngle?: boolean;
   matchBackgroundToProductInfo?: boolean;
@@ -28,10 +29,54 @@ export function buildGenerationPrompt({
   aspectRatio,
   presetId,
   customPrompt,
+  hasSourceImage = true,
   extractSellingPoints,
   adjustProductAngle,
   matchBackgroundToProductInfo,
 }: BuildGenerationPromptInput) {
+  const trimmedTargetLanguage = targetLanguage.trim();
+  const trimmedCustomPrompt = customPrompt?.trim();
+
+  if (!hasSourceImage && !trimmedCustomPrompt) {
+    throw new AppError("无图片时必须填写补充说明。", 400);
+  }
+
+  if (!hasSourceImage) {
+    const languageInstruction = extractSellingPoints
+      ? "If you add any overlay copy, keep it to 3-5 short selling-point phrases."
+      : "Create visible marketing copy only when it improves the ecommerce composition, and keep it minimal.";
+    const aspectRatioInstruction = aspectRatio?.trim()
+      ? `The final output canvas must be exactly ${aspectRatio.trim()}. Compose the scene natively for that ratio.`
+      : "Use an ecommerce-friendly output framing.";
+    const adjustAngleInstruction = adjustProductAngle
+      ? "Choose a deliberate, commercially effective product viewing angle rather than a flat catalog-style front view."
+      : null;
+    const backgroundMatchInstruction = matchBackgroundToProductInfo
+      ? [
+          "Choose a background and scene that fit the product's use case, material, and merchandising context.",
+          "Keep the composition marketplace-ready and visually coherent.",
+        ].join(" ")
+      : null;
+    const sellingPointsInstruction = extractSellingPoints
+      ? "Add a few short, punchy selling-point overlays only when they are directly supported by the merchant instruction."
+      : null;
+
+    return [
+      "You are generating a brand-new cross-border ecommerce product hero image.",
+      "Use only the merchant instruction as the source of truth for product details, materials, packaging, and claims.",
+      "Do not invent unsupported accessories, certifications, specifications, or marketing claims.",
+      "Keep the product as the clear focal point and maintain a clean marketplace-ready composition.",
+      languageInstruction,
+      adjustAngleInstruction,
+      sellingPointsInstruction,
+      backgroundMatchInstruction,
+      aspectRatioInstruction,
+      `Additional request from the merchant: ${trimmedCustomPrompt}`,
+    ]
+      .filter(Boolean)
+      .join("\n");
+  }
+
   const preset = PROMPT_PRESETS.find((item) => item.id === presetId);
 
   if (!preset) {
@@ -39,16 +84,16 @@ export function buildGenerationPrompt({
   }
 
   const languageInstruction = sourceLanguage?.trim()
-    ? `Translate every visible marketing text from ${sourceLanguage.trim()} into ${targetLanguage.trim()}.`
+    ? `Translate every visible marketing text from ${sourceLanguage.trim()} into ${trimmedTargetLanguage}.`
     : extractSellingPoints
-      ? `Detect whether the image contains existing text. If it does, translate the original text into ${targetLanguage.trim()}. If it does not, you may still add the requested selling-point overlays in ${targetLanguage.trim()}, but do not invent unrelated claims or long paragraphs.`
-      : `Detect whether the image contains existing text. If it does, translate the original text into ${targetLanguage.trim()}. If it does not, do not invent unnecessary text.`;
+      ? `Detect whether the image contains existing text. If it does, translate the original text into ${trimmedTargetLanguage}. If it does not, you may still add the requested selling-point overlays in ${trimmedTargetLanguage}, but do not invent unrelated claims or long paragraphs.`
+      : `Detect whether the image contains existing text. If it does, translate the original text into ${trimmedTargetLanguage}. If it does not, do not invent unnecessary text.`;
 
-  const customInstruction = customPrompt?.trim()
-    ? `Additional request from the merchant: ${customPrompt.trim()}`
+  const customInstruction = trimmedCustomPrompt
+    ? `Additional request from the merchant: ${trimmedCustomPrompt}`
     : "No extra merchant instructions were provided.";
   const sellingPointsInstruction = extractSellingPoints
-    ? `Extract the product's core selling points from the image and overlay a few short, punchy ${targetLanguage.trim()} keywords or phrases (no more than 3–5 items, each under 5 words) directly on the output. Keep text minimal — the goal is to accent selling points and beautify the image, not to cover it with paragraphs. Use clear visual hierarchy, appropriate font weight contrast, and harmonious placement that enhances rather than clutters the composition. The product must remain the dominant visual element. Even if the source image has no text, still add 3-5 short selling-point overlays in ${targetLanguage.trim()} based on the visible product attributes and use case.`
+    ? `Extract the product's core selling points from the image and overlay a few short, punchy ${trimmedTargetLanguage} keywords or phrases (no more than 3–5 items, each under 5 words) directly on the output. Keep text minimal — the goal is to accent selling points and beautify the image, not to cover it with paragraphs. Use clear visual hierarchy, appropriate font weight contrast, and harmonious placement that enhances rather than clutters the composition. The product must remain the dominant visual element. Even if the source image has no text, still add 3-5 short selling-point overlays in ${trimmedTargetLanguage} based on the visible product attributes and use case.`
     : null;
   const aspectRatioInstruction = aspectRatio?.trim()
     ? `The final output canvas must be exactly ${aspectRatio.trim()}. If the source image does not naturally fit, expand background, crop non-essential margins, or rebalance whitespace while keeping the product fully visible and commercially centered.`

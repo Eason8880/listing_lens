@@ -62,6 +62,7 @@ const GPT_IMAGE_SIZE_MAP: Record<ResolutionId, Record<AspectRatioId, string>> = 
     "4:3": "1024x768",
     "3:2": "1536x1024",
     "16:9": "1280x720",
+    "9:16": "720x1280",
   },
   "2k": {
     "1:1": "2048x2048",
@@ -71,6 +72,7 @@ const GPT_IMAGE_SIZE_MAP: Record<ResolutionId, Record<AspectRatioId, string>> = 
     "4:3": "2048x1536",
     "3:2": "2016x1344",
     "16:9": "2048x1152",
+    "9:16": "1152x2048",
   },
   "4k": {
     "1:1": "2880x2880",
@@ -80,6 +82,7 @@ const GPT_IMAGE_SIZE_MAP: Record<ResolutionId, Record<AspectRatioId, string>> = 
     "4:3": "3264x2448",
     "3:2": "3504x2336",
     "16:9": "3840x2160",
+    "9:16": "2160x3840",
   },
 };
 

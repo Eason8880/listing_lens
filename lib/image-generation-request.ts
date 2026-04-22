@@ -12,7 +12,7 @@ type RequestImageGenerationInput = {
   modelFamilyId: ModelFamilyId;
   resolutionId: ResolutionId;
   aspectRatioId: AspectRatioId;
-  sourceFile: File;
+  sourceFile?: File;
   fetchImpl?: typeof fetch;
 };
 
@@ -64,12 +64,18 @@ async function executeGenerationAttempt({
   attempt: GenerationAttempt;
   aspectRatioId: AspectRatioId;
   prompt: string;
-  sourceFile: File;
+  sourceFile?: File;
   sourceImageDataUrl?: string;
   fetchImpl: typeof fetch;
 }) {
-  if (attempt.requestStrategy === "generations-json-size") {
-    return fetchImpl(`${API_BASE_URL}${attempt.endpoint}`, {
+  if (attempt.requestStrategy === "generations-json-size" || !sourceFile) {
+    if (!sourceFile && attempt.requestStrategy === "edits-model-name") {
+      throw new Error("当前模型仅支持基于图片编辑，请先提供图片来源，或切换到 OpenAI GPT 2。");
+    }
+
+    const endpoint = sourceFile ? attempt.endpoint : "/v1/images/generations";
+
+    return fetchImpl(`${API_BASE_URL}${endpoint}`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -79,7 +85,7 @@ async function executeGenerationAttempt({
       body: JSON.stringify({
         model: attempt.model,
         prompt,
-        image: sourceImageDataUrl,
+        ...(sourceImageDataUrl ? { image: sourceImageDataUrl } : {}),
         size: attempt.size,
         n: 1,
         response_format: attempt.responseFormat,
@@ -168,7 +174,7 @@ export async function requestImageGeneration({
           prompt,
           sourceFile,
           sourceImageDataUrl:
-            attempt.requestStrategy === "generations-json-size"
+            sourceFile && attempt.requestStrategy === "generations-json-size"
               ? await (sourceImageDataUrlPromise ??= readFileAsDataUrl(sourceFile))
               : undefined,
           fetchImpl,
