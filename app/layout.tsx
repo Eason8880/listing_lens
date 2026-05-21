@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Analytics } from "@vercel/analytics/next";
 
 import { APP_NAME } from "@/lib/constants";
 
@@ -17,7 +18,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="zh-CN">
-      <body className="dashboard-body antialiased">{children}</body>
+      <body className="dashboard-body antialiased">
+        {children}
+        <Analytics />
+      </body>
     </html>
   );
 }
